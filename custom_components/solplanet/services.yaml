@@ -202,7 +202,7 @@ set_meter_limit_current:
     currDiff:
       name: Setpoint offset (A)
       description: Offset in amps. Range -10 to 10 A.
-      required: false
+      required: true
       selector:
         number:
           min: -10
@@ -221,12 +221,12 @@ set_meter_limit_current:
           mode: box
     lostCurrMax:
       name: Communications loss current limit (A)
-      description: Range 0 to 11 A.
+      description: Range 0 to Maximum export current limit (A).
       required: true
       selector:
         number:
           min: 0
-          max: 11
+          max: 3000
           step: 1
           mode: box
 

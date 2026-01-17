@@ -239,8 +239,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             "lostCurrMax": int(call.data["lostCurrMax"]),
             "maxOutCurr": int(call.data["maxOutCurr"]),
             "maxInCurr": int(call.data["maxInCurr"]),
-            "currDiff": int(call.data.get("currDiff") or 0),
+            "currDiff": int(call.data["currDiff"]),
         }
+
+        # The inverter expects lostCurrMax in range [0..maxOutCurr].
+        if payload["lostCurrMax"] > payload["maxOutCurr"]:
+            raise vol.Invalid("lostCurrMax must be <= maxOutCurr")
 
         await _apply_meter_payload(target, payload)
 
@@ -327,9 +331,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 vol.Optional("entity_id"): vol.Any(str, [str]),
                 vol.Required("maxOutCurr"): vol.All(vol.Coerce(int), vol.Range(min=0, max=3000)),
                 vol.Required("maxInCurr"): vol.All(vol.Coerce(int), vol.Range(min=0, max=3000)),
-                vol.Optional("currDiff"): vol.All(vol.Coerce(int), vol.Range(min=-10, max=10)),
+                vol.Required("currDiff"): vol.All(vol.Coerce(int), vol.Range(min=-10, max=10)),
                 vol.Required("lostTime"): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
-                vol.Required("lostCurrMax"): vol.All(vol.Coerce(int), vol.Range(min=0, max=11)),
+                # Actual upper bound depends on maxOutCurr; validated in the handler.
+                vol.Required("lostCurrMax"): vol.All(vol.Coerce(int), vol.Range(min=0, max=3000)),
             }
         ),
     )
