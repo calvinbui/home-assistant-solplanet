@@ -267,6 +267,24 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator):
             )
             meter_sn: str | None = isns[0] if isns else None
 
+            def _legacy_meter_payload_looks_valid(meter_data: object) -> bool:
+                """Return True if legacy `device=3` meter data looks real vs a stub/zeros payload."""
+                if meter_data is None:
+                    return False
+
+                # `tim` is present and non-empty on working meters.
+                tim = getattr(meter_data, "tim", None)
+                if isinstance(tim, str) and tim.strip():
+                    return True
+
+                # If any core numeric fields are non-zero, treat it as valid.
+                for attr in ("pac", "itd", "otd", "iet", "oet"):
+                    v = getattr(meter_data, attr, None)
+                    if isinstance(v, (int, float)) and v != 0:
+                        return True
+
+                return False
+
             # V2-only: additional meter inventory + live values via `POST /getting.cgi`.
             # The response can list multiple meters (main + sub). Live values are attached to the
             # discovered main meter because `get_meter_data_rsp` does not include a meter selector.
@@ -346,7 +364,10 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator):
                         exc_info=True,
                     )
 
-            # V2: prefer app-protocol (`getting.cgi`) meters and do not create legacy device=3 meters.
+            # V2:
+            # - Prefer app-protocol (`getting.cgi`) meters when supported.
+            # - Some V2 firmwares do not implement `getting.cgi` and return HTTP 404.
+            #   In that case, fall back to legacy meter endpoints (`device=3`) if they look valid.
             if self.__api.version == "v2":
                 if app_meters:
                     for sn, entry in app_meters.items():
@@ -359,8 +380,20 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator):
                         if entry.get("meter_power") is not None:
                             meter_payload[sn]["meter_power"] = entry.get("meter_power")
                 else:
-                    # Keep previous payload on transient failures.
-                    meter_payload = prev_meter
+                    # App protocol unsupported or returned no meters: try legacy device=3.
+                    try:
+                        legacy_data = await self.__api.get_meter_data()
+                        legacy_info = await self.__api.get_meter_info()
+                        if getattr(legacy_info, "sn", None) is not None:
+                            meter_sn = legacy_info.sn
+                        if meter_sn and _legacy_meter_payload_looks_valid(legacy_data):
+                            meter_payload = {meter_sn: {"data": legacy_data, "info": legacy_info}}
+                        else:
+                            # Keep previous payload on transient failures or stub responses.
+                            meter_payload = prev_meter
+                    except Exception as err:  # noqa: BLE001
+                        _LOGGER.debug("Failed fetching legacy V2 meter data: %s", err, exc_info=True)
+                        meter_payload = prev_meter
             else:
                 # V1: use legacy meter endpoints.
                 try:
