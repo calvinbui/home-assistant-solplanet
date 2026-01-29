@@ -144,6 +144,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SolplanetConfigEntry) ->
                 4: "EASTRON SDM120CT(40mA)",
                 6: "EASTRON SEM3-M-2L-CT1",
                 8: "EASTRON SEM1-M-2L-Grid",
+                9: "EASTRON SEM1-M-2L-PV",
                 11: "SolplanetCT",
                 12: "CT-STMHALL",
                 21: "CHINT DDSU666",
