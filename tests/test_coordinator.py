@@ -172,6 +172,26 @@ async def test_battery_zero_filled_payloads_retain_data_and_back_off() -> None:
 
 
 @pytest.mark.asyncio
+async def test_battery_energy_regressions_retain_counters_but_update_live_data() -> None:
+    """Partial daily-counter corruption does not discard valid live telemetry."""
+    hass = HomeAssistant("/tmp")
+    previous = SimpleNamespace(etdpv=297, ebi=356, ebo=258, pb=6436)
+    current = SimpleNamespace(etdpv=0, ebi=0, ebo=209, pb=5148)
+    api = SimpleNamespace(get_battery_data=AsyncMock(return_value=current))
+    runtime = SolplanetRuntimeData(api)
+    runtime.data[BATTERY_IDENTIFIER] = {"bat-1": {"data": previous}}
+    coordinator = SolplanetBatteryUpdateCoordinator(
+        hass, runtime, _entry(), timedelta(seconds=10)
+    )
+
+    await coordinator.async_refresh()
+
+    data = runtime.data[BATTERY_IDENTIFIER]["bat-1"]["data"]
+    assert (data.etdpv, data.ebi, data.ebo) == (297, 356, 258)
+    assert data.pb == 5148
+
+
+@pytest.mark.asyncio
 async def test_coordinator_lock_serializes_endpoint_updates() -> None:
     """Endpoint coordinators share the runtime lock."""
     hass = HomeAssistant("/tmp")

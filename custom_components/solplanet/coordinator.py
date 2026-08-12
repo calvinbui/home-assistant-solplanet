@@ -34,7 +34,10 @@ from .const import (
     METER_MODEL_NAMES,
 )
 from .modbus import DataType
-from .validation import is_zero_filled_battery_payload
+from .validation import (
+    is_zero_filled_battery_payload,
+    retain_previous_battery_energy_values,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -958,6 +961,15 @@ class SolplanetBatteryUpdateCoordinator(SolplanetDataUpdateCoordinator):
                         battery_id,
                     )
                     continue
+                retained_fields = retain_previous_battery_energy_values(
+                    data, entry.get("data")
+                )
+                if retained_fields:
+                    _LOGGER.debug(
+                        "Retaining previous battery energy values for %s: %s",
+                        battery_id,
+                        ", ".join(retained_fields),
+                    )
                 entry["data"] = data
             except Exception as err:  # noqa: BLE001
                 failed_device_ids.add(battery_id)
