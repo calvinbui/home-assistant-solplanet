@@ -172,12 +172,16 @@ async def test_battery_zero_filled_payloads_retain_data_and_back_off() -> None:
 
 
 @pytest.mark.asyncio
-async def test_battery_energy_regressions_retain_counters_but_update_live_data() -> None:
-    """Partial daily-counter corruption does not discard valid live telemetry."""
+async def test_battery_energy_reset_is_accepted_after_two_confirmations() -> None:
+    """Confirmed counter resets are delayed without discarding live telemetry."""
     hass = HomeAssistant("/tmp")
     previous = SimpleNamespace(etdpv=297, ebi=356, ebo=258, pb=6436)
-    current = SimpleNamespace(etdpv=0, ebi=0, ebo=209, pb=5148)
-    api = SimpleNamespace(get_battery_data=AsyncMock(return_value=current))
+    updates = [
+        SimpleNamespace(etdpv=0, ebi=0, ebo=0, pb=5148),
+        SimpleNamespace(etdpv=1, ebi=1, ebo=1, pb=1050),
+        SimpleNamespace(etdpv=2, ebi=2, ebo=2, pb=500),
+    ]
+    api = SimpleNamespace(get_battery_data=AsyncMock(side_effect=updates))
     runtime = SolplanetRuntimeData(api)
     runtime.data[BATTERY_IDENTIFIER] = {"bat-1": {"data": previous}}
     coordinator = SolplanetBatteryUpdateCoordinator(
@@ -185,10 +189,43 @@ async def test_battery_energy_regressions_retain_counters_but_update_live_data()
     )
 
     await coordinator.async_refresh()
+    first = runtime.data[BATTERY_IDENTIFIER]["bat-1"]["data"]
+    assert (first.etdpv, first.ebi, first.ebo, first.pb) == (297, 356, 258, 5148)
+
+    await coordinator.async_refresh()
+    second = runtime.data[BATTERY_IDENTIFIER]["bat-1"]["data"]
+    assert (second.etdpv, second.ebi, second.ebo, second.pb) == (297, 356, 258, 1050)
+
+    await coordinator.async_refresh()
+    third = runtime.data[BATTERY_IDENTIFIER]["bat-1"]["data"]
+    assert (third.etdpv, third.ebi, third.ebo, third.pb) == (2, 2, 2, 500)
+    assert coordinator._battery_energy_regression_candidates == {}
+
+
+@pytest.mark.asyncio
+async def test_battery_energy_transient_regression_recovers_without_reset() -> None:
+    """A two-poll counter regression is discarded when the values recover."""
+    hass = HomeAssistant("/tmp")
+    previous = SimpleNamespace(etdpv=297, ebi=356, ebo=258)
+    updates = [
+        SimpleNamespace(etdpv=0, ebi=0, ebo=209),
+        SimpleNamespace(etdpv=1, ebi=1, ebo=210),
+        SimpleNamespace(etdpv=298, ebi=357, ebo=259),
+    ]
+    api = SimpleNamespace(get_battery_data=AsyncMock(side_effect=updates))
+    runtime = SolplanetRuntimeData(api)
+    runtime.data[BATTERY_IDENTIFIER] = {"bat-1": {"data": previous}}
+    coordinator = SolplanetBatteryUpdateCoordinator(
+        hass, runtime, _entry(), timedelta(seconds=10)
+    )
+
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
 
     data = runtime.data[BATTERY_IDENTIFIER]["bat-1"]["data"]
-    assert (data.etdpv, data.ebi, data.ebo) == (297, 356, 258)
-    assert data.pb == 5148
+    assert (data.etdpv, data.ebi, data.ebo) == (298, 357, 259)
+    assert coordinator._battery_energy_regression_candidates == {}
 
 
 @pytest.mark.asyncio

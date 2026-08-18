@@ -941,6 +941,9 @@ class SolplanetBatteryUpdateCoordinator(SolplanetDataUpdateCoordinator):
             update_interval=update_interval,
         )
         self._zero_filled_update_count = 0
+        self._battery_energy_regression_candidates: dict[
+            str, dict[str, tuple[float | int, int]]
+        ] = {}
 
     @override
     async def _async_update_runtime_data(self) -> None:
@@ -961,14 +964,25 @@ class SolplanetBatteryUpdateCoordinator(SolplanetDataUpdateCoordinator):
                         battery_id,
                     )
                     continue
-                retained_fields = retain_previous_battery_energy_values(
-                    data, entry.get("data")
+                candidates = self._battery_energy_regression_candidates.setdefault(
+                    battery_id, {}
                 )
+                retained_fields, confirmed_fields = retain_previous_battery_energy_values(
+                    data, entry.get("data"), candidates
+                )
+                if not candidates:
+                    self._battery_energy_regression_candidates.pop(battery_id)
                 if retained_fields:
                     _LOGGER.debug(
-                        "Retaining previous battery energy values for %s: %s",
+                        "Retaining previous battery energy values pending confirmation for %s: %s",
                         battery_id,
                         ", ".join(retained_fields),
+                    )
+                if confirmed_fields:
+                    _LOGGER.debug(
+                        "Accepted confirmed battery energy reset for %s: %s",
+                        battery_id,
+                        ", ".join(confirmed_fields),
                     )
                 entry["data"] = data
             except Exception as err:  # noqa: BLE001
