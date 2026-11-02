@@ -271,8 +271,9 @@ async def test_send_modbus_decodes_response() -> None:
     client = MagicMock()
     client.post = AsyncMock(return_value={"data": _crc_frame(body)})
     api = _ModbusApi(client)
-    assert await api._send_modbus("request-frame", DataType.U16) == 42
-    client.post.assert_awaited_once_with("fdbg.cgi", {"data": "request-frame"})
+    frame = ModbusRtuFrameGenerator().generate_read_holding_register_frame(3, 40201, 1)
+    assert await api._send_modbus(frame, DataType.U16) == 42
+    client.post.assert_awaited_once_with("fdbg.cgi", {"data": frame})
 
 
 @pytest.mark.parametrize("response", [None, "frame", {}, {"result": "ok"}])
@@ -684,3 +685,62 @@ async def test_v2_set_schedule_slots_response_validation(
 def test_backward_compatible_api_alias() -> None:
     """The historic API class name continues to select V2."""
     assert SolplanetApi is SolplanetApiV2
+
+
+@pytest.mark.parametrize("status, reply", [(1, "03040200010130"), (0, "0304020000c0f0")])
+async def test_grid_register_read_uses_validated_function04_frame(status: int, reply: str) -> None:
+    """Read the documented input register through the existing configured client."""
+    client = MagicMock()
+    client.post = AsyncMock(return_value={"dat": "ok", "data": reply})
+    assert await _ModbusApi(client).modbus_read_input_registers(DataType.U16, 3, 31391) == status
+    client.post.assert_awaited_once_with("fdbg.cgi", {"data": "0304056e00015139"})
+
+
+@pytest.mark.parametrize("body", [
+    b"", b"\x04\x04\x02\x00\x01", b"\x03\x03\x02\x00\x01",
+    b"\x03\x04\x00\x00\x01", b"\x03\x04\x04\x00\x01\x00\x00",
+])
+async def test_grid_register_rejects_mismatched_response(body: bytes) -> None:
+    """Valid checksums do not make a wrong slave, function or byte count acceptable."""
+    client = MagicMock()
+    client.post = AsyncMock(return_value={"data": _crc_frame(body)})
+    with pytest.raises(ValueError, match="Modbus read response"):
+        await _ModbusApi(client).modbus_read_input_registers(DataType.U16, 3, 31391)
+
+
+async def test_grid_register_crc_failure_and_exception_response() -> None:
+    client = MagicMock()
+    client.post = AsyncMock(side_effect=[
+        {"data": "03040200010131"},
+        {"data": _crc_frame(b"\x03\x84\x02")},
+    ])
+    api = _ModbusApi(client)
+    with pytest.raises(ValueError, match="CRC"):
+        await api.modbus_read_input_registers(DataType.U16, 3, 31391)
+    assert await api.modbus_read_input_registers(DataType.U16, 3, 31391) == {
+        "device_id": 3, "error_function_code": 0x84, "exception_code": 2,
+    }
+
+
+async def test_modbus_read_validation_preserves_write_acknowledgements() -> None:
+    """Read-response validation leaves the existing write acknowledgement path intact."""
+    client = MagicMock()
+    frame = ModbusRtuFrameGenerator().generate_write_single_holding_register_frame(
+        7, 40201, 1, DataType.U16
+    )
+    client.post = AsyncMock(return_value={"data": frame})
+    assert await _ModbusApi(client).modbus_write_single_holding_register(
+        DataType.U16, 7, 40201, 1
+    ) == {"device_id": 7, "function_code": 6, "register_address": 200, "data": 1}
+
+
+@pytest.mark.parametrize("scheme, port", [("http", 18084), ("https", 9443)])
+async def test_grid_register_uses_configured_connection(scheme: str, port: int) -> None:
+    """The input-register read reuses the configured host, port and transport."""
+    session = _Session(_Response(json.dumps({"data": _crc_frame(b"\x07\x04\x02\x00\x01")}).encode()))
+    client = SolplanetClient("configured-dongle.local", session, scheme=scheme, port=port)
+    assert await SolplanetApiV2(client).modbus_read_input_registers(DataType.U16, 7, 31391) == 1
+    method, url, options = session.calls[0]
+    assert method == "POST"
+    assert url == f"{scheme}://configured-dongle.local:{port}/fdbg.cgi"
+    assert options["json"]["data"].startswith("0704056e0001")

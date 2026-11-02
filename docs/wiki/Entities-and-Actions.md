@@ -14,6 +14,23 @@ Use the inverter device to monitor power, production, frequency, temperatures, w
 
 Turning off **Power** can stop the inverter. Keep this switch away from general-purpose dashboards and automations unless you deliberately need it.
 
+On V2 systems, **Grid status** uses the inverter's `grid_sts` JSON field when
+provided. If it is missing, the integration reads input register **31391**
+(function 04, offset 1390) at the inverter address from device discovery, using
+the normal inverter polling interval and shared gateway queue. Values 1 and 0
+mean connected and disconnected. Failed, unsupported or invalid reads leave
+Grid status unknown without marking other telemetry as failed; no settings are
+written. Explicit unsupported-function or unsupported-register replies are
+retried after the existing 10-minute failure interval; temporary read errors
+are retried on the next normal poll. A failed request can still hold the shared
+queue until the configured request timeout and retries finish.
+
+This describes the inverter's grid connection, which may also change during
+deliberate Off-grid operation. It is not a verified indication of physical
+utility voltage on every model. Events shorter than the polling interval may
+be missed. If using this integrated fallback, remove any separate package
+polling the same register to avoid duplicate requests.
+
 ### Battery
 
 Use the battery device to monitor state of charge, state of health, charging or discharging power, current limits, communication status, warnings, and errors.
