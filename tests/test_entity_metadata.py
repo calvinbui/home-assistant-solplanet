@@ -96,29 +96,59 @@ def test_translation_catalogs_are_complete_and_placeholders_match() -> None:
                 assert set(re.findall(r"\{([^{}]+)\}", name)) == placeholders
 
 
-def test_spanish_translation_catalog_is_complete() -> None:
-    """The Spanish catalog covers every Core key and every runtime entity."""
+def test_spanish_translation_catalog_translates_valid_keys() -> None:
+    """Spanish translations are valid but may be incomplete.
+
+    Home Assistant loads English first and overlays the requested language on
+    top, so a key missing from ``es.json`` falls back to English at runtime
+    instead of breaking. A partial translation is therefore legitimate and
+    must not fail the build; only a defective translation is an error.
+
+    Two defects are still rejected because both silently discard a
+    translation the author believed was applied:
+
+    - a key that does not exist in the Core catalog (typo or stale rename);
+    - a translated string whose placeholders differ from the source, which
+      Home Assistant drops in favour of the English string.
+    """
     strings = _load_json(COMPONENT_DIR / "strings.json")
     spanish = _load_json(COMPONENT_DIR / "translations" / "es.json")
 
-    def _keys(node: dict, prefix: str = "") -> set[str]:
-        keys = set()
+    def _flatten(node: dict, prefix: str = "") -> dict[str, str]:
+        flat: dict[str, str] = {}
         for key, value in node.items():
             path = f"{prefix}.{key}" if prefix else key
             if isinstance(value, dict):
-                keys |= _keys(value, path)
+                flat |= _flatten(value, path)
             else:
-                keys.add(path)
-        return keys
+                flat[path] = value
+        return flat
 
-    assert _keys(strings) == _keys(spanish)
+    source = _flatten(strings)
+    translated = _flatten(spanish)
+
+    # Missing keys are allowed: Home Assistant falls back to English for them.
+    # A key that does not exist upstream, however, is a typo or a stale rename.
+    unknown = set(translated) - set(source)
+    assert not unknown, f"Spanish keys absent from the Core catalog: {sorted(unknown)}"
+
+    for key, value in translated.items():
+        source_placeholders = set(re.findall(r"\{([^{}]+)\}", source[key]))
+        translated_placeholders = set(re.findall(r"\{([^{}]+)\}", value))
+        assert translated_placeholders == source_placeholders, (
+            f"Spanish placeholders for {key} differ from the source: "
+            f"{translated_placeholders} != {source_placeholders}"
+        )
 
     for domain, descriptions in _catalog().items():
-        expected_keys = {description.translation_key for description in descriptions}
-        assert expected_keys == set(spanish["entity"][domain])
+        valid_keys = {description.translation_key for description in descriptions}
+        assert set(spanish["entity"][domain]) <= valid_keys
         for description in descriptions:
+            key = description.translation_key
+            if key not in spanish["entity"][domain]:
+                continue
             placeholders = set(description.translation_placeholders or {})
-            name = spanish["entity"][domain][description.translation_key]["name"]
+            name = spanish["entity"][domain][key]["name"]
             assert set(re.findall(r"\{([^{}]+)\}", name)) == placeholders
 
 
