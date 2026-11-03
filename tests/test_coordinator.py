@@ -20,6 +20,7 @@ from custom_components.solplanet.client import (
 from custom_components.solplanet.const import (
     BATTERY_IDENTIFIER,
     CONF_INTERVAL,
+    CONF_MODBUS_TELEMETRY_FALLBACKS,
     DEFAULT_INTERVAL,
     DOMAIN,
     DONGLE_IDENTIFIER,
@@ -41,9 +42,9 @@ from custom_components.solplanet.coordinator import (
 from custom_components.solplanet.modbus import DataType
 
 
-def _entry() -> MockConfigEntry:
+def _entry(*, modbus_telemetry_fallbacks: bool = False) -> MockConfigEntry:
     return MockConfigEntry(
-        data={CONF_INTERVAL: DEFAULT_INTERVAL},
+        data={CONF_INTERVAL: DEFAULT_INTERVAL, CONF_MODBUS_TELEMETRY_FALLBACKS: modbus_telemetry_fallbacks},
         domain="solplanet",
     )
 
@@ -55,6 +56,7 @@ def _api(version: str = "v2") -> SimpleNamespace:
         client=SimpleNamespace(get=AsyncMock(), post=AsyncMock()),
         get_inverter_info=AsyncMock(),
         get_inverter_data=AsyncMock(),
+        get_grid_status=AsyncMock(return_value=1),
         get_battery_info=AsyncMock(),
         get_battery_data=AsyncMock(),
         get_meter_info=AsyncMock(),
@@ -1280,23 +1282,20 @@ async def test_grid_status_modbus_fallback(status: int) -> None:
     api = _api()
     data = GetInverterDataResponse(pac=456)
     api.get_inverter_data.return_value = data
-    api.modbus_read_input_registers.return_value = status
+    api.get_grid_status.return_value = status
     runtime = SolplanetRuntimeData(api)
     runtime.data[INVERTER_IDENTIFIER] = {
         "inv": {"info": GetInverterInfoItemResponse(add=7)}
     }
     coordinator = SolplanetInverterUpdateCoordinator(
-        HomeAssistant("/tmp"), runtime, _entry(), timedelta(seconds=60)
+        HomeAssistant("/tmp"), runtime, _entry(modbus_telemetry_fallbacks=True), timedelta(seconds=60)
     )
     await coordinator.async_refresh()
     result = runtime.data[INVERTER_IDENTIFIER]["inv"]["data"]
     assert (result.grid_sts, result.pac) == (status, 456)
     assert data.grid_sts is None
     assert coordinator.last_update_success
-    api.modbus_read_input_registers.assert_awaited_once_with(
-        data_type=DataType.U16, device_address=7,
-        register_address=31391, register_count=1,
-    )
+    api.get_grid_status.assert_awaited_once_with(7)
     api.modbus_write_single_holding_register.assert_not_awaited()
     api.modbus_write_multiple_holding_registers.assert_not_awaited()
 
@@ -1306,11 +1305,11 @@ async def test_grid_status_invalid_modbus_result_is_unknown(response: object) ->
     """Invalid results cannot become a connected or disconnected state."""
     api = _api()
     api.get_inverter_data.return_value = GetInverterDataResponse(pac=123)
-    api.modbus_read_input_registers.return_value = response
+    api.get_grid_status.return_value = response
     runtime = SolplanetRuntimeData(api)
     runtime.data[INVERTER_IDENTIFIER] = {"inv": {"info": SimpleNamespace(add=3)}}
     coordinator = SolplanetInverterUpdateCoordinator(
-        HomeAssistant("/tmp"), runtime, _entry(), timedelta(seconds=60)
+        HomeAssistant("/tmp"), runtime, _entry(modbus_telemetry_fallbacks=True), timedelta(seconds=60)
     )
     await coordinator.async_refresh()
     result = runtime.data[INVERTER_IDENTIFIER]["inv"]["data"]
@@ -1326,11 +1325,11 @@ async def test_grid_status_failed_read_clears_previous_state_and_recovers() -> N
         GetInverterDataResponse(pac=100), GetInverterDataResponse(pac=200),
         GetInverterDataResponse(pac=300),
     ]
-    api.modbus_read_input_registers.side_effect = [1, TimeoutError("offline"), 0]
+    api.get_grid_status.side_effect = [1, TimeoutError("offline"), 0]
     runtime = SolplanetRuntimeData(api)
     runtime.data[INVERTER_IDENTIFIER] = {"inv": {"info": SimpleNamespace(add=3)}}
     coordinator = SolplanetInverterUpdateCoordinator(
-        HomeAssistant("/tmp"), runtime, _entry(), timedelta(seconds=60)
+        HomeAssistant("/tmp"), runtime, _entry(modbus_telemetry_fallbacks=True), timedelta(seconds=60)
     )
     with patch("custom_components.solplanet.coordinator.monotonic", return_value=1000) as clock:
         for status, power in [(1, 100), (None, 200), (0, 300)]:
@@ -1349,10 +1348,10 @@ async def test_grid_status_does_not_guess_unknown_slave(address: object) -> None
     runtime = SolplanetRuntimeData(api)
     runtime.data[INVERTER_IDENTIFIER] = {"inv": {"info": SimpleNamespace(add=address)}}
     coordinator = SolplanetInverterUpdateCoordinator(
-        HomeAssistant("/tmp"), runtime, _entry(), timedelta(seconds=60)
+        HomeAssistant("/tmp"), runtime, _entry(modbus_telemetry_fallbacks=True), timedelta(seconds=60)
     )
     await coordinator.async_refresh()
-    api.modbus_read_input_registers.assert_not_awaited()
+    api.get_grid_status.assert_not_awaited()
     assert runtime.data[INVERTER_IDENTIFIER]["inv"]["data"].grid_sts is None
 
 
@@ -1363,10 +1362,10 @@ async def test_grid_status_preserves_native_json_and_skips_v1(version: str, stat
     runtime = SolplanetRuntimeData(api)
     runtime.data[INVERTER_IDENTIFIER] = {"inv": {"info": SimpleNamespace(add=3)}}
     coordinator = SolplanetInverterUpdateCoordinator(
-        HomeAssistant("/tmp"), runtime, _entry(), timedelta(seconds=60)
+        HomeAssistant("/tmp"), runtime, _entry(modbus_telemetry_fallbacks=True), timedelta(seconds=60)
     )
     await coordinator.async_refresh()
-    api.modbus_read_input_registers.assert_not_awaited()
+    api.get_grid_status.assert_not_awaited()
     assert runtime.data[INVERTER_IDENTIFIER]["inv"]["data"].grid_sts == status
 
 
@@ -1380,48 +1379,50 @@ async def test_grid_status_is_read_for_each_discovered_inverter_under_shared_loc
         "second": {"info": SimpleNamespace(add=7)},
     }
 
-    async def read_register(**kwargs: object) -> int:
+    async def read_register(device_address: int) -> int:
         assert runtime.coordinator_lock.locked()
-        return 1 if kwargs["device_address"] == 7 else 0
+        return 1 if device_address == 7 else 0
 
-    api.modbus_read_input_registers.side_effect = read_register
+    api.get_grid_status.side_effect = read_register
     coordinator = SolplanetInverterUpdateCoordinator(
-        HomeAssistant("/tmp"), runtime, _entry(), timedelta(seconds=60)
+        HomeAssistant("/tmp"), runtime, _entry(modbus_telemetry_fallbacks=True), timedelta(seconds=60)
     )
     await coordinator.async_refresh()
     assert runtime.data[INVERTER_IDENTIFIER]["first"]["data"].grid_sts == 0
     assert runtime.data[INVERTER_IDENTIFIER]["second"]["data"].grid_sts == 1
-    assert api.modbus_read_input_registers.await_count == 2
+    assert api.get_grid_status.await_count == 2
 
 
-@pytest.mark.parametrize("failure", [{"exception_code": 1}, {"exception_code": 2}])
-async def test_grid_status_unsupported_register_backs_off_without_stale_state(failure: object) -> None:
-    """Explicitly unsupported reads are not repeated on every telemetry poll."""
+async def test_grid_status_unsupported_register_stops_until_reload() -> None:
+    """Unsupported reads stop while JSON telemetry continues, until a new coordinator."""
     api = _api()
     api.get_inverter_data.side_effect = [
-        GetInverterDataResponse(pac=100), GetInverterDataResponse(pac=200),
-        GetInverterDataResponse(pac=300),
+        GetInverterDataResponse(pac=n) for n in range(4)
     ]
-    api.modbus_read_input_registers.side_effect = [failure, 1]
+    api.get_grid_status.side_effect = [NotImplementedError("unsupported"), 1]
     runtime = SolplanetRuntimeData(api)
     runtime.data[INVERTER_IDENTIFIER] = {"inv": {"info": SimpleNamespace(add=7)}}
+    entry = _entry(modbus_telemetry_fallbacks=True)
+    hass = HomeAssistant("/tmp")
     coordinator = SolplanetInverterUpdateCoordinator(
-        HomeAssistant("/tmp"), runtime, _entry(), timedelta(seconds=60)
+        hass, runtime, entry, timedelta(seconds=60)
     )
     with patch("custom_components.solplanet.coordinator.monotonic", return_value=1000) as clock:
-        await coordinator.async_refresh()
-        clock.return_value += 1
-        await coordinator.async_refresh()
-        assert api.modbus_read_input_registers.await_count == 1
-        result = runtime.data[INVERTER_IDENTIFIER]["inv"]["data"]
-        assert (result.grid_sts, result.pac) == (None, 200)
-        assert coordinator.last_update_success
+        for n, now in enumerate((1000, 1600, 100000)):
+            clock.return_value = now
+            await coordinator.async_refresh()
+            result = runtime.data[INVERTER_IDENTIFIER]["inv"]["data"]
+            assert (result.grid_sts, result.pac) == (None, n)
+            assert coordinator.last_update_success
+        api.get_grid_status.assert_awaited_once_with(7)
 
-        clock.return_value = 1000 + FAILED_UPDATE_INTERVAL.total_seconds()
-        await coordinator.async_refresh()
+        reloaded = SolplanetInverterUpdateCoordinator(
+            hass, runtime, entry, timedelta(seconds=60)
+        )
+        await reloaded.async_refresh()
         result = runtime.data[INVERTER_IDENTIFIER]["inv"]["data"]
-        assert (result.grid_sts, result.pac) == (1, 300)
-        assert api.modbus_read_input_registers.await_count == 2
+        assert (result.grid_sts, result.pac) == (1, 3)
+        assert api.get_grid_status.await_count == 2
 
 
 async def test_grid_status_backoff_is_per_address_and_native_json_takes_priority() -> None:
@@ -1429,15 +1430,16 @@ async def test_grid_status_backoff_is_per_address_and_native_json_takes_priority
     api.get_inverter_data.side_effect = [
         GetInverterDataResponse(), GetInverterDataResponse(),
         GetInverterDataResponse(grid_sts=0), GetInverterDataResponse(),
+        GetInverterDataResponse(), GetInverterDataResponse(),
     ]
-    api.modbus_read_input_registers.side_effect = [{"exception_code": 2}, 1, 0]
+    api.get_grid_status.side_effect = [NotImplementedError("unsupported"), 1, 0, 1]
     runtime = SolplanetRuntimeData(api)
     runtime.data[INVERTER_IDENTIFIER] = {
         "first": {"info": SimpleNamespace(add=3)},
         "second": {"info": SimpleNamespace(add=7)},
     }
     coordinator = SolplanetInverterUpdateCoordinator(
-        HomeAssistant("/tmp"), runtime, _entry(), timedelta(seconds=60)
+        HomeAssistant("/tmp"), runtime, _entry(modbus_telemetry_fallbacks=True), timedelta(seconds=60)
     )
     with patch("custom_components.solplanet.coordinator.monotonic", return_value=1000):
         await coordinator.async_refresh()
@@ -1446,7 +1448,10 @@ async def test_grid_status_backoff_is_per_address_and_native_json_takes_priority
         await coordinator.async_refresh()
     assert runtime.data[INVERTER_IDENTIFIER]["first"]["data"].grid_sts == 0
     assert runtime.data[INVERTER_IDENTIFIER]["second"]["data"].grid_sts == 0
-    assert [c.kwargs["device_address"] for c in api.modbus_read_input_registers.await_args_list] == [3, 7, 7]
+    await coordinator.async_refresh()
+    assert runtime.data[INVERTER_IDENTIFIER]["first"]["data"].grid_sts is None
+    assert runtime.data[INVERTER_IDENTIFIER]["second"]["data"].grid_sts == 1
+    assert [c.args[0] for c in api.get_grid_status.await_args_list] == [3, 7, 7, 7]
 
 
 @pytest.mark.parametrize("failure", [TimeoutError("temporary"), ValueError("CRC error"), None, 65535,
@@ -1455,11 +1460,11 @@ async def test_grid_status_transient_failure_retries_on_next_poll(failure: objec
     """A temporary read error must not suppress the next outage reading."""
     api = _api()
     api.get_inverter_data.side_effect = [GetInverterDataResponse() for _ in range(3)]
-    api.modbus_read_input_registers.side_effect = [1, failure, 0]
+    api.get_grid_status.side_effect = [1, failure, 0]
     runtime = SolplanetRuntimeData(api)
     runtime.data[INVERTER_IDENTIFIER] = {"inv": {"info": SimpleNamespace(add=7)}}
     coordinator = SolplanetInverterUpdateCoordinator(
-        HomeAssistant("/tmp"), runtime, _entry(), timedelta(seconds=60)
+        HomeAssistant("/tmp"), runtime, _entry(modbus_telemetry_fallbacks=True), timedelta(seconds=60)
     )
     with patch("custom_components.solplanet.coordinator.monotonic", return_value=1000) as clock:
         for expected in (1, None, 0):
@@ -1467,4 +1472,75 @@ async def test_grid_status_transient_failure_retries_on_next_poll(failure: objec
             assert runtime.data[INVERTER_IDENTIFIER]["inv"]["data"].grid_sts == expected
             assert coordinator.last_update_success
             clock.return_value += coordinator.update_interval.total_seconds()
-    assert api.modbus_read_input_registers.await_count == 3
+    assert api.get_grid_status.await_count == 3
+
+
+@pytest.mark.parametrize("configured", [None, False])
+async def test_modbus_telemetry_fallbacks_requires_opt_in(configured: bool | None) -> None:
+    api = _api()
+    api.get_inverter_data.return_value = GetInverterDataResponse(pac=123)
+    entry = MockConfigEntry(domain=DOMAIN, data=(
+        {} if configured is None else {CONF_MODBUS_TELEMETRY_FALLBACKS: configured}
+    ))
+    runtime = SolplanetRuntimeData(api)
+    runtime.data[INVERTER_IDENTIFIER] = {"inv": {"info": SimpleNamespace(add=7)}}
+    coordinator = SolplanetInverterUpdateCoordinator(
+        HomeAssistant("/tmp"), runtime, entry, timedelta(seconds=60)
+    )
+    await coordinator.async_refresh()
+    api.get_grid_status.assert_not_awaited()
+    assert runtime.data[INVERTER_IDENTIFIER]["inv"]["data"].pac == 123
+    assert runtime.data[INVERTER_IDENTIFIER]["inv"]["data"].grid_sts is None
+
+
+@pytest.mark.parametrize("failure", [TimeoutError(), ValueError("CRC"), None])
+async def test_grid_status_repeated_failures_back_off_and_recover(failure: object) -> None:
+    api = _api()
+    api.get_inverter_data.side_effect = [GetInverterDataResponse(pac=n) for n in range(9)]
+    api.get_grid_status.side_effect = [failure, failure, failure, failure, 1, failure, 0]
+    runtime = SolplanetRuntimeData(api)
+    runtime.data[INVERTER_IDENTIFIER] = {"inv": {"info": SimpleNamespace(add=7)}}
+    coordinator = SolplanetInverterUpdateCoordinator(
+        HomeAssistant("/tmp"), runtime, _entry(modbus_telemetry_fallbacks=True), timedelta(seconds=60)
+    )
+    with patch("custom_components.solplanet.coordinator.monotonic", return_value=1000) as clock:
+        for n in range(3):
+            await coordinator.async_refresh()
+            clock.return_value += 60
+        assert api.get_grid_status.await_count == 3
+        await coordinator.async_refresh()
+        assert api.get_grid_status.await_count == 3
+        assert runtime.data[INVERTER_IDENTIFIER]["inv"]["data"].pac == 3
+        assert runtime.data[INVERTER_IDENTIFIER]["inv"]["data"].grid_sts is None
+        assert coordinator.last_update_success
+        assert coordinator.update_interval == timedelta(seconds=60)
+        clock.return_value = 1720
+        await coordinator.async_refresh()
+        clock.return_value = 1780
+        await coordinator.async_refresh()
+        assert api.get_grid_status.await_count == 4
+        clock.return_value = 2320
+        await coordinator.async_refresh()
+        assert runtime.data[INVERTER_IDENTIFIER]["inv"]["data"].grid_sts == 1
+        clock.return_value += 60
+        await coordinator.async_refresh()
+        clock.return_value += 60
+        await coordinator.async_refresh()
+        assert runtime.data[INVERTER_IDENTIFIER]["inv"]["data"].grid_sts == 0
+        assert api.get_grid_status.await_count == 7
+
+
+async def test_native_grid_status_resets_failure_history_without_known_address() -> None:
+    api = _api()
+    runtime = SolplanetRuntimeData(api)
+    coordinator = SolplanetInverterUpdateCoordinator(
+        HomeAssistant("/tmp"), runtime, _entry(modbus_telemetry_fallbacks=True), timedelta(seconds=60)
+    )
+    data = GetInverterDataResponse(grid_sts=1)
+    assert await coordinator._async_add_grid_status(data, None) is data
+    coordinator._grid_status_failures[7] = 2
+    coordinator._grid_status_retry_after[7] = 9999
+    await coordinator._async_add_grid_status(data, SimpleNamespace(add=7))
+    assert not coordinator._grid_status_failures
+    assert not coordinator._grid_status_retry_after
+    api.get_grid_status.assert_not_awaited()

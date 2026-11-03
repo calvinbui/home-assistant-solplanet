@@ -739,8 +739,64 @@ async def test_grid_register_uses_configured_connection(scheme: str, port: int) 
     """The input-register read reuses the configured host, port and transport."""
     session = _Session(_Response(json.dumps({"data": _crc_frame(b"\x07\x04\x02\x00\x01")}).encode()))
     client = SolplanetClient("configured-dongle.local", session, scheme=scheme, port=port)
-    assert await SolplanetApiV2(client).modbus_read_input_registers(DataType.U16, 7, 31391) == 1
+    assert await SolplanetApiV2(client).get_grid_status(7) == 1
     method, url, options = session.calls[0]
     assert method == "POST"
     assert url == f"{scheme}://configured-dongle.local:{port}/fdbg.cgi"
     assert options["json"]["data"].startswith("0704056e0001")
+
+
+@pytest.mark.parametrize("response, expected", [
+    (0, 0), (1, 1), (True, None), (None, None), (65535, None),
+    ("1", None), ([1], None), ({"exception_code": 4}, None),
+])
+async def test_get_grid_status_validates_response(response: object, expected: int | None) -> None:
+    api = SolplanetApiV2(MagicMock())
+    api.modbus_read_input_registers = AsyncMock(return_value=response)
+    assert await api.get_grid_status(7) == expected
+    api.modbus_read_input_registers.assert_awaited_once_with(
+        data_type=DataType.U16, device_address=7, register_address=31391, register_count=1
+    )
+
+
+@pytest.mark.parametrize("code", [1, 2])
+async def test_get_grid_status_reports_unsupported_register(code: int) -> None:
+    api = SolplanetApiV2(MagicMock())
+    api.modbus_read_input_registers = AsyncMock(return_value={"exception_code": code})
+    with pytest.raises(NotImplementedError, match="Grid status"):
+        await api.get_grid_status(7)
+
+
+async def test_grid_status_deadline_cancels_request_and_releases_shared_queue() -> None:
+    client = MagicMock()
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def slow_post(*args: object) -> None:
+        started.set()
+        try:
+            await asyncio.Future()
+        finally:
+            cancelled.set()
+
+    client.post = AsyncMock(side_effect=slow_post)
+    api = SolplanetApiV2(client)
+    queue = asyncio.Lock()
+
+    async def read() -> None:
+        async with queue:
+            await api.get_grid_status(7)
+
+    real_timeout = asyncio.timeout
+    deadline = real_timeout(None)
+    with patch("custom_components.solplanet.client.asyncio.timeout", return_value=deadline) as timeout:
+        task = asyncio.create_task(read())
+        await started.wait()
+        assert queue.locked()
+        deadline.reschedule(asyncio.get_running_loop().time())
+        with pytest.raises(TimeoutError):
+            await task
+    timeout.assert_called_once_with(3)
+    assert cancelled.is_set()
+    assert not queue.locked()
+    client.post.assert_awaited_once()

@@ -1016,6 +1016,19 @@ class SolplanetApiV2(ModbusApiMixin):
         _LOGGER.debug("Creating api v2 instance")
         self.client = client
 
+    async def get_grid_status(self, device_address: int) -> int | None:
+        """Read the V2 inverter's grid connection status from input register 31391."""
+        async with asyncio.timeout(3):
+            status = await self.modbus_read_input_registers(
+                data_type=DataType.U16,
+                device_address=device_address,
+                register_address=31391,
+                register_count=1,
+            )
+        if isinstance(status, dict) and status.get("exception_code") in (1, 2):
+            raise NotImplementedError("Grid status register is not supported")
+        return status if type(status) is int and status in (0, 1) else None
+
     async def get_inverter_data(self, sn: str) -> GetInverterDataResponse:
         """Get inverter data."""
         _LOGGER.debug("Getting inverter (%s) data", sn)

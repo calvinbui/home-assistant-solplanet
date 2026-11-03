@@ -28,6 +28,7 @@ from .client import (
 )
 from .const import (
     BATTERY_IDENTIFIER,
+    CONF_MODBUS_TELEMETRY_FALLBACKS,
     DISCOVERY_SIGNAL,
     DOMAIN,
     DONGLE_IDENTIFIER,
@@ -888,7 +889,12 @@ class SolplanetInverterUpdateCoordinator(SolplanetDataUpdateCoordinator):
         update_interval: timedelta,
     ) -> None:
         """Initialize the inverter coordinator."""
+        self._modbus_telemetry_fallbacks = (
+            config_entry.data.get(CONF_MODBUS_TELEMETRY_FALLBACKS, False) is True
+        )
         self._grid_status_retry_after: dict[int, float] = {}
+        self._grid_status_failures: dict[int, int] = {}
+        self._grid_status_unsupported: set[int] = set()
         super().__init__(
             hass,
             runtime,
@@ -908,7 +914,11 @@ class SolplanetInverterUpdateCoordinator(SolplanetDataUpdateCoordinator):
         for inverter_id, entry in entries.items():
             try:
                 data = await self.api.get_inverter_data(inverter_id)
-                if isinstance(data, GetInverterDataResponse) and self.api.version == "v2":
+                if (
+                    self._modbus_telemetry_fallbacks
+                    and isinstance(data, GetInverterDataResponse)
+                    and self.api.version == "v2"
+                ):
                     data = await self._async_add_grid_status(data, entry.get("info"))
                 entry["data"] = data
             except Exception as err:  # noqa: BLE001
@@ -931,33 +941,40 @@ class SolplanetInverterUpdateCoordinator(SolplanetDataUpdateCoordinator):
         self, data: GetInverterDataResponse, info: Any
     ) -> GetInverterDataResponse:
         """Read grid connection status when V2 JSON omits it."""
+        address = getattr(info, "add", None)
         if data.grid_sts is not None:
+            if type(address) is int:
+                self._grid_status_failures.pop(address, None)
+                self._grid_status_retry_after.pop(address, None)
             return data
 
-        address = getattr(info, "add", None)
         if type(address) is not int or not 1 <= address <= 247:
             return data
 
-        now = monotonic()
-        if now < self._grid_status_retry_after.get(address, 0):
+        if address in self._grid_status_unsupported:
+            return data
+
+        if monotonic() < self._grid_status_retry_after.get(address, 0):
             return data
 
         try:
-            status = await self.api.modbus_read_input_registers(
-                data_type=DataType.U16,
-                device_address=address,
-                register_address=31391,
-                register_count=1,
-            )
+            status = await self.api.get_grid_status(address)
+        except NotImplementedError:
+            self._grid_status_unsupported.add(address)
+            return data
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("Failed reading grid connection status at address %s: %s", address, err)
-            return data
+            status = None
 
         if type(status) is int and status in (0, 1):
+            self._grid_status_failures.pop(address, None)
             self._grid_status_retry_after.pop(address, None)
             return replace(data, grid_sts=status)
-        if isinstance(status, dict) and status.get("exception_code") in (1, 2):
-            self._grid_status_retry_after[address] = now + FAILED_UPDATE_INTERVAL.total_seconds()
+
+        failures = self._grid_status_failures.get(address, 0) + 1
+        self._grid_status_failures[address] = failures
+        if failures >= MAX_FAILED_UPDATES:
+            self._grid_status_retry_after[address] = monotonic() + FAILED_UPDATE_INTERVAL.total_seconds()
         return data
 
 

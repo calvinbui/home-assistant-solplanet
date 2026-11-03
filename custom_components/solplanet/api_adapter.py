@@ -246,6 +246,10 @@ class SolplanetApiAdapter:
         """
         await self._v2_api().set_schedule_slots(schedule)
 
+    async def get_grid_status(self, device_address: int) -> int | None:
+        """Fetch V2 inverter grid connection status."""
+        return await self._v2_api().get_grid_status(device_address)
+
     # ========================================================================
     # Modbus methods (delegated to underlying API)
     # ========================================================================

@@ -30,6 +30,7 @@ from custom_components.solplanet.config_flow import (
 )
 from custom_components.solplanet.const import (
     CONF_INTERVAL,
+    CONF_MODBUS_TELEMETRY_FALLBACKS,
     DEFAULT_INTERVAL,
     DOMAIN,
     DONGLE_IDENTIFIER,
@@ -523,7 +524,8 @@ async def test_dhcp_rejects_placeholder_mac_before_probing(hass) -> None:
     validate.assert_not_awaited()
 
 
-async def test_options_flow_shows_current_value_and_updates_entry(hass) -> None:
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_options_flow_shows_current_value_and_updates_entry(hass, enabled: bool) -> None:
     """The options flow persists the selected interval and reloads the entry."""
     entry = _entry(interval=30)
     entry.add_to_hass(hass)
@@ -533,11 +535,17 @@ async def test_options_flow_shows_current_value_and_updates_entry(hass) -> None:
         form = await hass.config_entries.options.async_init(entry.entry_id)
         assert form["type"] is FlowResultType.FORM
         assert form["data_schema"]({})[CONF_INTERVAL] == 30
+        assert form["data_schema"]({})[CONF_MODBUS_TELEMETRY_FALLBACKS] is False
         result = await hass.config_entries.options.async_configure(
-            form["flow_id"], {CONF_INTERVAL: 120}
+            form["flow_id"], {CONF_INTERVAL: 120, CONF_MODBUS_TELEMETRY_FALLBACKS: enabled}
         )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.data[CONF_INTERVAL] == 120
+    assert entry.data[CONF_MODBUS_TELEMETRY_FALLBACKS] is enabled
+    flow = SolplanetOptionsFlow(entry)
+    flow.hass = hass
+    form = await flow.async_step_init()
+    assert form["data_schema"]({})[CONF_MODBUS_TELEMETRY_FALLBACKS] is enabled
     reload.assert_awaited_once_with(entry.entry_id)
 
 
