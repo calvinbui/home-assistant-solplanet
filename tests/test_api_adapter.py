@@ -136,6 +136,7 @@ async def test_indexed_meter_reads_delegate_only_to_v2() -> None:
         ("set_battery_soc_min", ("BAT", 10)),
         ("set_battery_soc_max", ("BAT", 90)),
         ("get_schedule", ()),
+        ("get_grid_status", (7,)),
         ("set_schedule_power", (1000, 2000)),
         ("set_schedule_pin", (1000,)),
         ("set_schedule_pout", (2000,)),
@@ -151,7 +152,7 @@ async def test_v2_battery_operations_delegate(
     mock = AsyncMock(return_value=result)
     setattr(api, method, mock)
     returned = await getattr(adapter, method)(*args)
-    returning_methods = {"get_battery_data", "get_battery_info", "get_schedule"}
+    returning_methods = {"get_battery_data", "get_battery_info", "get_schedule", "get_grid_status"}
     assert returned == (result if method in returning_methods else None)
     mock.assert_awaited_once_with(*args)
 
@@ -165,6 +166,7 @@ async def test_v2_battery_operations_delegate(
         ("set_battery_soc_min", ("BAT", 10)),
         ("set_battery_soc_max", ("BAT", 90)),
         ("get_schedule", ()),
+        ("get_grid_status", (7,)),
         ("set_schedule_power", (1000, 2000)),
         ("set_schedule_pin", (1000,)),
         ("set_schedule_pout", (2000,)),

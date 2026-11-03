@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import timedelta
+from time import monotonic
 from typing import Any, cast, override
 
 from aiohttp import ClientResponseError
@@ -22,10 +23,12 @@ from .client import (
     BatteryWorkMode,
     BatteryWorkModes,
     GetBatteryInfoResponse,
+    GetInverterDataResponse,
     ScheduleSlot,
 )
 from .const import (
     BATTERY_IDENTIFIER,
+    CONF_MODBUS_TELEMETRY_FALLBACKS,
     DISCOVERY_SIGNAL,
     DOMAIN,
     DONGLE_IDENTIFIER,
@@ -886,6 +889,12 @@ class SolplanetInverterUpdateCoordinator(SolplanetDataUpdateCoordinator):
         update_interval: timedelta,
     ) -> None:
         """Initialize the inverter coordinator."""
+        self._modbus_telemetry_fallbacks = (
+            config_entry.data.get(CONF_MODBUS_TELEMETRY_FALLBACKS, False) is True
+        )
+        self._grid_status_retry_after: dict[int, float] = {}
+        self._grid_status_failures: dict[int, int] = {}
+        self._grid_status_unsupported: set[int] = set()
         super().__init__(
             hass,
             runtime,
@@ -904,7 +913,14 @@ class SolplanetInverterUpdateCoordinator(SolplanetDataUpdateCoordinator):
 
         for inverter_id, entry in entries.items():
             try:
-                entry["data"] = await self.api.get_inverter_data(inverter_id)
+                data = await self.api.get_inverter_data(inverter_id)
+                if (
+                    self._modbus_telemetry_fallbacks
+                    and isinstance(data, GetInverterDataResponse)
+                    and self.api.version == "v2"
+                ):
+                    data = await self._async_add_grid_status(data, entry.get("info"))
+                entry["data"] = data
             except Exception as err:  # noqa: BLE001
                 failed_device_ids.add(inverter_id)
                 last_error = err
@@ -920,6 +936,46 @@ class SolplanetInverterUpdateCoordinator(SolplanetDataUpdateCoordinator):
         self.failed_device_ids = failed_device_ids
         if entries and successful_updates == 0:
             raise last_error or RuntimeError("No inverter data returned")
+
+    async def _async_add_grid_status(
+        self, data: GetInverterDataResponse, info: Any
+    ) -> GetInverterDataResponse:
+        """Read grid connection status when V2 JSON omits it."""
+        address = getattr(info, "add", None)
+        if data.grid_sts is not None:
+            if type(address) is int:
+                self._grid_status_failures.pop(address, None)
+                self._grid_status_retry_after.pop(address, None)
+            return data
+
+        if type(address) is not int or not 1 <= address <= 247:
+            return data
+
+        if address in self._grid_status_unsupported:
+            return data
+
+        if monotonic() < self._grid_status_retry_after.get(address, 0):
+            return data
+
+        try:
+            status = await self.api.get_grid_status(address)
+        except NotImplementedError:
+            self._grid_status_unsupported.add(address)
+            return data
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Failed reading grid connection status at address %s: %s", address, err)
+            status = None
+
+        if type(status) is int and status in (0, 1):
+            self._grid_status_failures.pop(address, None)
+            self._grid_status_retry_after.pop(address, None)
+            return replace(data, grid_sts=status)
+
+        failures = self._grid_status_failures.get(address, 0) + 1
+        self._grid_status_failures[address] = failures
+        if failures >= MAX_FAILED_UPDATES:
+            self._grid_status_retry_after[address] = monotonic() + FAILED_UPDATE_INTERVAL.total_seconds()
+        return data
 
 
 class SolplanetBatteryUpdateCoordinator(SolplanetDataUpdateCoordinator):

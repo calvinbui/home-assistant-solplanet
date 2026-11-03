@@ -14,6 +14,21 @@ Use the inverter device to monitor power, production, frequency, temperatures, w
 
 Turning off **Power** can stop the inverter. Keep this switch away from general-purpose dashboards and automations unless you deliberately need it.
 
+On V2 systems, **Grid status** shows whether the inverter is connected to the grid.
+If this reading is missing, you can enable **Modbus telemetry fallbacks** in the
+integration's **Configure** options. This is off by default and does not affect
+existing settings reads.
+
+When needed, the fallback adds a read to each inverter poll, with a 3-second deadline.
+After three consecutive failed reads, it pauses for 10 minutes. Each failed recovery
+probe starts another 10-minute pause. Unsupported reads stop until the integration
+is reloaded or the option is turned off and back on. Failed or skipped reads show
+**Unknown**.
+
+Off-grid mode can show disconnected even when utility power is available.
+Short interruptions may also be missed between polls. If you use this fallback,
+remove any separate polling of the same grid-status register to avoid duplicate reads.
+
 ### Battery
 
 Use the battery device to monitor state of charge, state of health, charging or discharging power, current limits, communication status, warnings, and errors.

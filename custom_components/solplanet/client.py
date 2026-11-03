@@ -247,6 +247,20 @@ class ModbusApiMixin:
             raise RuntimeError(f"Unexpected Modbus response from fdbg.cgi: {response!r}")
 
         response_frame = cast(str, response["data"])
+        request = bytes.fromhex(frame)
+        reply = bytes.fromhex(response_frame)
+        if request[1] in (0x03, 0x04):
+            if len(reply) < 2 or reply[0] != request[0]:
+                raise ValueError("Modbus read response has an unexpected device address")
+            if reply[1] != (request[1] | 0x80):
+                expected_bytes = int.from_bytes(request[4:6], "big") * 2
+                if (
+                    reply[1] != request[1]
+                    or len(reply) != expected_bytes + 5
+                    or reply[2] != expected_bytes
+                ):
+                    raise ValueError("Modbus read response does not match the requested registers")
+
         data = ModbusRtuFrameGenerator().decode_response(
             response_hex=response_frame, data_type=data_type
         )
@@ -1001,6 +1015,19 @@ class SolplanetApiV2(ModbusApiMixin):
         """Create instance of solplanet api v2."""
         _LOGGER.debug("Creating api v2 instance")
         self.client = client
+
+    async def get_grid_status(self, device_address: int) -> int | None:
+        """Read the V2 inverter's grid connection status from input register 31391."""
+        async with asyncio.timeout(3):
+            status = await self.modbus_read_input_registers(
+                data_type=DataType.U16,
+                device_address=device_address,
+                register_address=31391,
+                register_count=1,
+            )
+        if isinstance(status, dict) and status.get("exception_code") in (1, 2):
+            raise NotImplementedError("Grid status register is not supported")
+        return status if type(status) is int and status in (0, 1) else None
 
     async def get_inverter_data(self, sn: str) -> GetInverterDataResponse:
         """Get inverter data."""

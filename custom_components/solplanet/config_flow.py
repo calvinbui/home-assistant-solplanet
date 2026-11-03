@@ -24,6 +24,7 @@ from .api_adapter import SolplanetApiAdapter
 from .client import SolplanetClient
 from .const import (
     CONF_INTERVAL,
+    CONF_MODBUS_TELEMETRY_FALLBACKS,
     DEFAULT_INTERVAL,
     DOMAIN,
     DONGLE_IDENTIFIER,
@@ -327,6 +328,7 @@ class SolplanetOptionsFlow(OptionsFlow):
             new_data = {
                 **self._config_entry.data,
                 CONF_INTERVAL: user_input[CONF_INTERVAL],
+                CONF_MODBUS_TELEMETRY_FALLBACKS: user_input.get(CONF_MODBUS_TELEMETRY_FALLBACKS, False),
             }
             self.hass.config_entries.async_update_entry(self._config_entry, data=new_data)
             await self.hass.config_entries.async_reload(self._config_entry.entry_id)
@@ -336,6 +338,10 @@ class SolplanetOptionsFlow(OptionsFlow):
         current_interval = self._config_entry.data.get(CONF_INTERVAL, DEFAULT_INTERVAL)
         schema = vol.Schema(
             {
+                vol.Required(
+                    CONF_MODBUS_TELEMETRY_FALLBACKS,
+                    default=self._config_entry.data.get(CONF_MODBUS_TELEMETRY_FALLBACKS, False),
+                ): bool,
                 vol.Required(CONF_INTERVAL, default=current_interval): vol.All(
                     vol.Coerce(int), vol.Range(min=MIN_INTERVAL, max=MAX_INTERVAL)
                 ),

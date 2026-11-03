@@ -46,10 +46,12 @@
         "title": "Configure Solplanet",
         "description": "Set live telemetry polling (10-3600 seconds). Device metadata and settings update hourly.",
         "data": {
-          "interval": "Live data update interval (seconds)"
+          "interval": "Live data update interval (seconds)",
+          "modbus_telemetry_fallbacks": "Enable Modbus telemetry fallbacks"
         },
         "data_description": {
-          "interval": "Seconds between live telemetry updates."
+          "interval": "Seconds between live telemetry updates.",
+          "modbus_telemetry_fallbacks": "Use Modbus to read missing sensor data."
         }
       }
     }
