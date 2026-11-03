@@ -96,6 +96,32 @@ def test_translation_catalogs_are_complete_and_placeholders_match() -> None:
                 assert set(re.findall(r"\{([^{}]+)\}", name)) == placeholders
 
 
+def test_spanish_translation_catalog_is_complete() -> None:
+    """The Spanish catalog covers every Core key and every runtime entity."""
+    strings = _load_json(COMPONENT_DIR / "strings.json")
+    spanish = _load_json(COMPONENT_DIR / "translations" / "es.json")
+
+    def _keys(node: dict, prefix: str = "") -> set[str]:
+        keys = set()
+        for key, value in node.items():
+            path = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, dict):
+                keys |= _keys(value, path)
+            else:
+                keys.add(path)
+        return keys
+
+    assert _keys(strings) == _keys(spanish)
+
+    for domain, descriptions in _catalog().items():
+        expected_keys = {description.translation_key for description in descriptions}
+        assert expected_keys == set(spanish["entity"][domain])
+        for description in descriptions:
+            placeholders = set(description.translation_placeholders or {})
+            name = spanish["entity"][domain][description.translation_key]["name"]
+            assert set(re.findall(r"\{([^{}]+)\}", name)) == placeholders
+
+
 def test_exception_translation_catalogs_are_complete() -> None:
     """Every translated runtime exception is present in both English catalogs."""
     strings = _load_json(COMPONENT_DIR / "strings.json")["exceptions"]

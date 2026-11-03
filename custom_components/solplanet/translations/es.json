@@ -46,10 +46,12 @@
         "title": "Configurar Solplanet",
         "description": "Configura el sondeo de telemetría en vivo (10-3600 segundos). Los metadatos y la configuración del dispositivo se actualizan cada hora.",
         "data": {
-          "interval": "Intervalo de actualización de datos en vivo (segundos)"
+          "interval": "Intervalo de actualización de datos en vivo (segundos)",
+          "modbus_telemetry_fallbacks": "Activar alternativas de telemetría por Modbus"
         },
         "data_description": {
-          "interval": "Segundos entre actualizaciones de telemetría en vivo."
+          "interval": "Segundos entre actualizaciones de telemetría en vivo.",
+          "modbus_telemetry_fallbacks": "Usar Modbus para leer los datos de los sensores que faltan."
         }
       }
     }
@@ -230,7 +232,12 @@
       "eps_phase_voltage": { "name": "Voltaje fase {phase} EPS" },
       "eps_phase_current": { "name": "Corriente fase {phase} EPS" },
       "eps_phase_power": { "name": "Potencia fase {phase} EPS" },
-      "eps_phase_reactive_power": { "name": "Potencia reactiva fase {phase} EPS" }
+      "eps_phase_reactive_power": { "name": "Potencia reactiva fase {phase} EPS" },
+      "submeter_power": { "name": "Potencia del medidor secundario" },
+      "submeter_energy_imported_today": { "name": "Energía importada hoy del medidor secundario" },
+      "submeter_energy_imported_total": { "name": "Energía importada total del medidor secundario" },
+      "submeter_energy_exported_today": { "name": "Energía exportada hoy del medidor secundario" },
+      "submeter_energy_exported_total": { "name": "Energía exportada total del medidor secundario" }
     },
     "switch": {
       "inverter_power": { "name": "Potencia" },
