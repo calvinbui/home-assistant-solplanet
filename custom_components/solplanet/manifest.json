@@ -1,6 +1,9 @@
 {
   "domain": "solplanet",
   "name": "Solplanet",
+  "categories": [
+    "energy.solar_batteries"
+  ],
   "codeowners": [
     "@calvinbui"
   ],

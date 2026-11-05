@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from homeassistant.components.diagnostics import REDACTED
 from homeassistant.const import CONF_HOST
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.solplanet.client import (
     BatteryWorkMode,
