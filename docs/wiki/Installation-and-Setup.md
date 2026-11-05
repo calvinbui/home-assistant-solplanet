@@ -11,7 +11,19 @@ You need:
 
 You do not need your inverter serial number, a Solplanet cloud account, or installer credentials.
 
+## Install With Marketplace
+
+Home Assistant 2026.11 and newer includes Marketplace:
+
+1. Open **Settings > Marketplace**.
+2. Find **Solplanet**, or select **Add from link** and add `https://github.com/calvinbui/home-assistant-solplanet` if it is not listed.
+3. Select **Install** and continue in the setup flow. A restart is not required for the first installation.
+
+Updates still require a restart. Marketplace creates a repair with a restart button when one is needed.
+
 ## Install With HACS
+
+Home Assistant 2026.10 and earlier can install the integration through HACS:
 
 1. Open HACS.
 2. Select the three-dot menu, then **Custom repositories**.
@@ -19,7 +31,7 @@ You do not need your inverter serial number, a Solplanet cloud account, or insta
 4. Find and install **Solplanet**.
 5. Restart Home Assistant when HACS asks you to.
 
-If you are moving from another Solplanet custom integration, remove the old repository and integration first. Keeping both variants installed can cause HACS or Home Assistant to load the wrong files.
+If you are moving from another Solplanet custom integration, remove the old repository and integration first. Keeping both variants installed can cause Home Assistant to load the wrong files.
 
 ## Install Manually
 
@@ -79,5 +91,5 @@ The integration serializes all requests to the dongle, so its live-data pollers 
 
 1. Open **Settings > Devices & services**.
 2. Open the **Solplanet** integration menu and select **Delete**.
-3. If you installed it with HACS, remove the custom repository. If you installed it manually, delete `custom_components/solplanet` from the Home Assistant configuration directory.
+3. If you installed it with Marketplace or HACS, remove the custom repository. If you installed it manually, delete `custom_components/solplanet` from the Home Assistant configuration directory.
 4. Restart Home Assistant.

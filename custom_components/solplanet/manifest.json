@@ -5,6 +5,9 @@
     "@calvinbui"
   ],
   "config_flow": true,
+  "categories": [
+    "energy.solar_batteries"
+  ],
   "dependencies": [],
   "dhcp": [
     {

@@ -21,16 +21,20 @@ This repository is a fork of the upstream integration by [`zbigniewmotyka`](http
 - A compatible Solplanet inverter and network-connected smart dongle
 - The dongle IP address or hostname, reachable from Home Assistant
 
+<!-- ha-marketplace:exclude-start -->
 ## Installation
 
-### With HACS
+### With Marketplace or HACS
 
-[![Open in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=calvinbui&repository=home-assistant-solplanet&category=integration)
+Home Assistant 2026.11 and newer includes Marketplace under **Settings > Marketplace**. Earlier versions can install the integration through HACS.
+
+[![Open in Marketplace or HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=calvinbui&repository=home-assistant-solplanet&category=integration)
 
 ### Manual Installation
 
 1. Copy `custom_components/solplanet` into `config/custom_components/solplanet` in your Home Assistant configuration directory.
 2. Restart Home Assistant.
+<!-- ha-marketplace:exclude-end -->
 
 ## Documentation
 
