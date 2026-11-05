@@ -1,13 +1,13 @@
 {
   "domain": "solplanet",
   "name": "Solplanet",
+  "categories": [
+    "energy.solar_batteries"
+  ],
   "codeowners": [
     "@calvinbui"
   ],
   "config_flow": true,
-  "categories": [
-    "energy.solar_batteries"
-  ],
   "dependencies": [],
   "dhcp": [
     {
