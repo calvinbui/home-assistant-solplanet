@@ -55,7 +55,7 @@ def _registry(*devices: SimpleNamespace) -> SimpleNamespace:
         async_get_or_create=Mock(),
         async_remove_device=Mock(),
         async_update_device=Mock(),
-        devices=SimpleNamespace(
+        _devices=SimpleNamespace(
             get_devices_for_config_entry_id=Mock(return_value=list(devices))
         ),
     )
@@ -226,7 +226,7 @@ def test_register_devices_detaches_only_authoritatively_stale_devices() -> None:
         call(device_id="stale-meter", remove_config_entry_id="entry-id"),
     ]
     registry.async_remove_device.assert_not_called()
-    registry.devices.get_devices_for_config_entry_id.assert_called_once_with("entry-id")
+    registry._devices.get_devices_for_config_entry_id.assert_called_once_with("entry-id")
 
 
 def test_register_devices_preserves_uncertain_dongle_and_meter_entries() -> None:
@@ -376,13 +376,13 @@ async def test_setup_entry_imports_real_platforms_and_builds_runtime() -> None:
     assert hass.data[DOMAIN][entry.entry_id] is entry.runtime_data
     entry.async_on_unload.assert_called_once_with("remove-listener")
     listener = metadata.async_add_listener.call_args.args[0]
-    assert registry.devices.get_devices_for_config_entry_id.call_count == 1
+    assert registry._devices.get_devices_for_config_entry_id.call_count == 1
     metadata.last_update_success = False
     listener()
-    assert registry.devices.get_devices_for_config_entry_id.call_count == 1
+    assert registry._devices.get_devices_for_config_entry_id.call_count == 1
     metadata.last_update_success = True
     listener()
-    assert registry.devices.get_devices_for_config_entry_id.call_count == 2
+    assert registry._devices.get_devices_for_config_entry_id.call_count == 2
     hass.config_entries.async_forward_entry_setups.assert_awaited_once_with(
         entry,
         integration.PLATFORMS,
