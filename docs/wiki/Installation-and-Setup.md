@@ -91,5 +91,6 @@ The integration serializes all requests to the dongle, so its live-data pollers 
 
 1. Open **Settings > Devices & services**.
 2. Open the **Solplanet** integration menu and select **Delete**.
-3. If you installed it with Marketplace or HACS, remove the custom repository. If you installed it manually, delete `custom_components/solplanet` from the Home Assistant configuration directory.
-4. Restart Home Assistant.
+3. If you installed it with Marketplace, select **Delete and uninstall** when prompted. Otherwise, open the Solplanet repository in Marketplace and select **Uninstall** from its three-dot menu.
+4. If you installed it with HACS, uninstall the integration and remove the custom repository. If you installed it manually, delete `custom_components/solplanet` from the Home Assistant configuration directory.
+5. Restart Home Assistant.
