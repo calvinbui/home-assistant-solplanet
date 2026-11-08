@@ -2,7 +2,6 @@
   "domain": "solplanet",
   "name": "Solplanet",
   "categories": [
-    "energy",
     "energy.solar_batteries",
     "energy.meters_monitoring"
   ],
