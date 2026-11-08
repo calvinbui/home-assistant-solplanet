@@ -11,19 +11,17 @@ You need:
 
 You do not need your inverter serial number, a Solplanet cloud account, or installer credentials.
 
-## Install With Marketplace
+## Install With Marketplace (Home Assistant 2026.11 and newer)
 
-Home Assistant 2026.11 and newer includes Marketplace:
+These Marketplace instructions have not yet been verified on Home Assistant 2026.11.
 
 1. Open **Settings > Marketplace**.
-2. Find **Solplanet**, or select **Add from link** and add `https://github.com/calvinbui/home-assistant-solplanet` if it is not listed.
+2. Select **Add from link** and add `https://github.com/calvinbui/home-assistant-solplanet`. Use this exact repository rather than another integration named **Solplanet**.
 3. Select **Install** and continue in the setup flow. A restart is not required for the first installation.
 
 Updates still require a restart. Marketplace creates a repair with a restart button when one is needed.
 
-## Install With HACS
-
-Home Assistant 2026.10 and earlier can install the integration through HACS:
+## Install With HACS (Home Assistant 2026.10 and earlier)
 
 1. Open HACS.
 2. Select the three-dot menu, then **Custom repositories**.
@@ -91,6 +89,8 @@ The integration serializes all requests to the dongle, so its live-data pollers 
 
 1. Open **Settings > Devices & services**.
 2. Open the **Solplanet** integration menu and select **Delete**.
-3. If you installed it with Marketplace, select **Delete and uninstall** when prompted. Otherwise, open the Solplanet repository in Marketplace and select **Uninstall** from its three-dot menu.
-4. If you installed it with HACS, uninstall the integration and remove the custom repository. If you installed it manually, delete `custom_components/solplanet` from the Home Assistant configuration directory.
-5. Restart Home Assistant.
+3. Complete the removal for your installation method:
+   - **Marketplace:** select **Delete and uninstall** when prompted. Otherwise, open the Solplanet repository in Marketplace and select **Uninstall** from its three-dot menu.
+   - **HACS:** uninstall the integration and remove the custom repository.
+   - **Manual:** delete `custom_components/solplanet` from the Home Assistant configuration directory.
+4. Restart Home Assistant.
