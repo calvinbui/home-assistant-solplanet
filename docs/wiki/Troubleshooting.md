@@ -7,7 +7,7 @@
 3. Confirm Home Assistant can reach TCP port 443 or 8484 on the dongle. Ping is not required.
 4. Check firewall rules, guest Wi-Fi isolation, and VLAN routing.
 5. Confirm only one Solplanet custom integration is installed.
-6. If you moved from the original integration, remove its HACS repository before reinstalling this one.
+6. If you moved from the original integration, remove its Marketplace or HACS repository before reinstalling this one.
 7. Run the tests in [Advanced Local Access](Advanced-Local-Access#test-the-connection).
 
 A failed HTTPS test does not mean the dongle is unsupported. It may use HTTP on port 8484 instead.
