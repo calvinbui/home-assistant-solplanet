@@ -1,3 +1,50 @@
+replace_schedule_day:
+  name: Replace Schedule Day
+  description: Replace all slots for one day in one schedule write. Other days are read from the inverter immediately before the write.
+  target:
+    entity:
+      integration: solplanet
+      domain: binary_sensor
+  fields:
+    day:
+      name: Day
+      description: Day of the week to replace
+      required: true
+      selector:
+        select:
+          options:
+            - "Mon"
+            - "Tus"
+            - "Wen"
+            - "Thu"
+            - "Fri"
+            - "Sat"
+            - "Sun"
+    slots:
+      name: Slots
+      description: List of slots with start_hour, start_minute, duration, and mode fields. Use an empty list to clear the day.
+      required: true
+    pin:
+      name: Schedule Input Power
+      description: Optional charging power in watts (0-10000, in 100 W steps).
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 10000
+          step: 100
+          mode: box
+    pout:
+      name: Schedule Output Power
+      description: Optional discharging power in watts (0-10000, in 100 W steps).
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 10000
+          step: 100
+          mode: box
+
 set_schedule_slots:
   name: Set Schedule Slots
   description: Set a charging/discharging schedule slot for a specific battery

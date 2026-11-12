@@ -457,6 +457,48 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
                 translation_placeholders={"error": str(err)},
             ) from err
 
+    async def replace_battery_schedule_day(
+        self,
+        sn: str,
+        day: str,
+        slots: list[ScheduleSlot],
+        pin: int | None = None,
+        pout: int | None = None,
+    ) -> None:
+        """Replace one day using a fresh schedule and write the full update once."""
+        try:
+            async with self.runtime.coordinator_lock:
+                current = await self.__api.get_schedule()
+                current_slots = current["slots"]
+                if not all(schedule_day in current_slots for schedule_day in BatterySchedule.DAYS):
+                    raise ValueError("The inverter returned an incomplete schedule")
+
+                new_slots = {
+                    schedule_day: list(current_slots[schedule_day]) for schedule_day in BatterySchedule.DAYS
+                }
+                new_slots[day] = list(slots)
+
+                raw = current["raw"]
+                raw_schedule = BatterySchedule.encode_schedule(
+                    new_slots,
+                    pin=(pin if pin is not None else raw.get("Pin", current.get("Pin", 0))),
+                    pout=(pout if pout is not None else raw.get("Pout", current.get("Pout", 0))),
+                )
+                _LOGGER.debug("Replacing schedule day %s for %s", day, sn)
+                await self.__api.set_schedule_slots(raw_schedule)
+            await self.runtime.async_request_metadata_refresh()
+        except NotImplementedError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="battery_operation_unsupported_v1",
+            ) from err
+        except Exception as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="battery_operation_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
+
     async def set_battery_schedule_power(self, pin: int | None = None, pout: int | None = None) -> None:
         """Set battery schedule power settings."""
         try:

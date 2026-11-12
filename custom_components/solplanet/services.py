@@ -18,6 +18,45 @@ type MeterPayload = dict[str, int]
 type MeterPayloadValidator = Callable[[object, MeterPayload], None]
 
 
+def _coerce_schedule_int(value: object) -> int:
+    """Coerce integral schedule values without truncating fractions or accepting booleans."""
+    if isinstance(value, bool):
+        raise vol.Invalid("Expected an integer")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError as err:
+            raise vol.Invalid("Expected an integer") from err
+    raise vol.Invalid("Expected an integer")
+
+
+def _multiple_of_100(value: int) -> int:
+    """Require schedule power values to use the inverter's 100 W step."""
+    if value % 100:
+        raise vol.Invalid("Value must be a multiple of 100")
+    return value
+
+
+_REPLACE_SCHEDULE_SLOT_SCHEMA = vol.Schema(
+    {
+        vol.Required("start_hour"): vol.All(_coerce_schedule_int, vol.Range(min=0, max=23)),
+        vol.Required("start_minute"): vol.All(_coerce_schedule_int, vol.In([0, 30])),
+        vol.Required("duration"): vol.All(_coerce_schedule_int, vol.Range(min=1, max=4)),
+        vol.Required("mode"): vol.In(["charge", "discharge"]),
+    }
+)
+
+_SCHEDULE_POWER_SCHEMA = vol.All(
+    _coerce_schedule_int,
+    vol.Range(min=0, max=10000),
+    _multiple_of_100,
+)
+
+
 def _build_target(call: ServiceCall) -> ServiceTarget:
     """
     Extract entity_id/device_id from call.data.
@@ -101,6 +140,54 @@ async def get_meter_isn_from_target(
 
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Set up services for Solplanet integration."""
+
+    async def replace_schedule_day(call: ServiceCall) -> None:
+        """Replace every slot for one day in a single schedule write."""
+        target = _build_target(call)
+        isns = await get_isn_from_target(hass, target)
+        if not isns:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="no_valid_battery_targets",
+            )
+
+        try:
+            slots = [ScheduleSlot.from_dict(slot_data) for slot_data in call.data["slots"]]
+            if len(slots) > 6:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="schedule_slot_limit",
+                )
+            ScheduleSlot.validate_slots(slots)
+        except ValueError as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="invalid_schedule",
+                translation_placeholders={"error": str(err)},
+            ) from err
+
+        processed = False
+        for runtime in hass.data[DOMAIN].values():
+            coordinator = runtime.coordinator
+            if isn := next(
+                (identifier for identifier in isns if identifier in coordinator.data[BATTERY_IDENTIFIER]),
+                None,
+            ):
+                await coordinator.replace_battery_schedule_day(
+                    isn,
+                    call.data["day"],
+                    slots,
+                    pin=call.data.get("pin"),
+                    pout=call.data.get("pout"),
+                )
+                processed = True
+
+        if not processed:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="battery_coordinator_not_found",
+                translation_placeholders={"identifiers": ", ".join(sorted(isns))},
+            )
 
     async def set_schedule_slots(call: ServiceCall) -> None:
         """Handle set_schedule_slots service."""
@@ -371,6 +458,22 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         await _apply_meter_payload(target, payload, compatibility=True)
 
     # Service schemas stay the same
+    hass.services.async_register(
+        DOMAIN,
+        "replace_schedule_day",
+        replace_schedule_day,
+        schema=vol.Schema(
+            {
+                vol.Optional("entity_id"): vol.Any(str, [str]),
+                vol.Optional("device_id"): vol.Any(str, [str]),
+                vol.Required("day"): vol.In(BatterySchedule.DAYS),
+                vol.Required("slots"): vol.All([_REPLACE_SCHEDULE_SLOT_SCHEMA], vol.Length(max=6)),
+                vol.Optional("pin"): _SCHEDULE_POWER_SCHEMA,
+                vol.Optional("pout"): _SCHEDULE_POWER_SCHEMA,
+            }
+        ),
+    )
+
     hass.services.async_register(
         DOMAIN,
         "set_schedule_slots",
