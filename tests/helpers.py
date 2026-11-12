@@ -148,6 +148,7 @@ class FakeCoordinator:
             "set_battery_power",
             "set_battery_sleep_enabled",
             "set_battery_schedule_slots",
+            "replace_battery_schedule_day",
             "set_meter_power_limit",
             "set_compatibility_meter_power_limit",
         ):

@@ -34,7 +34,30 @@ The ASW008K/010K-SH manual also says Custom mode requires the Ai-Dongle to maint
 
 Wait for a successful integration update before changing a schedule, and first confirm that the existing schedule is visible in the Solplanet app. If the dongle's schedule data has not loaded, do not run a schedule action because existing slots may not be retained.
 
-Each call adds one slot to the schedule currently loaded by the integration; it does not intentionally replace existing slots. You can add up to six non-overlapping slots per day. A slot can start on the hour or half-hour and last one to four whole hours. Keep every slot within one day and do not use a duration that carries it past midnight.
+Each **Set Schedule Slots** call adds one slot to the schedule currently loaded by the integration; it does not intentionally replace existing slots. You can add up to six non-overlapping slots per day. A slot can start on the hour or half-hour and last one to four whole hours. Keep every slot within one day and do not use a duration that carries it past midnight.
+
+For automation-managed schedules, use **Replace Schedule Day** to send the complete list of slots for one day in one Home Assistant action. The integration reads the current schedule immediately before writing, keeps the other days, and can include optional Schedule Input Power (`pin`) and Schedule Output Power (`pout`) values in the same API write. Use an empty `slots` list to clear only the selected day. This removes the empty intermediate schedule created by separate clear-and-add actions. The integration makes one device write, but cannot guarantee that inverter firmware applies that write transactionally.
+
+Each replacement slot has `start_hour` (0-23), `start_minute` (0 or 30), `duration` (1-4 whole hours), and `mode` (`charge` or `discharge`). A day can contain at most six non-overlapping slots; no slot may cross midnight. Optional power values must be between 0 and 10000 W in 100 W steps.
+
+For example, the action data below replaces Monday with one charging and one discharging period:
+
+```yaml
+action: solplanet.replace_schedule_day
+target:
+  entity_id: binary_sensor.solplanet_schedule_configured
+data:
+  day: Mon
+  slots:
+    - start_hour: 3
+      start_minute: 0
+      duration: 2
+      mode: charge
+    - start_hour: 18
+      start_minute: 30
+      duration: 3
+      mode: discharge
+```
 
 The current action labels Tuesday as `Tus` and Wednesday as `Wen`. These labels are expected by the dongle schedule format.
 

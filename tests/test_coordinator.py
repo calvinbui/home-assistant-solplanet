@@ -13,9 +13,11 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.solplanet.client import (
+    BatterySchedule,
     GetInverterDataResponse,
     GetInverterInfoItemResponse,
     GetMeterDataResponse,
+    ScheduleSlot,
 )
 from custom_components.solplanet.const import (
     BATTERY_IDENTIFIER,
@@ -635,6 +637,61 @@ async def test_battery_schedule_writes() -> None:
         "battery_operation_failed",
         {"error": "offline"},
     )
+
+
+@pytest.mark.asyncio
+async def test_replace_battery_schedule_day_uses_fresh_schedule_and_reads_back() -> None:
+    """Replacement preserves freshly read other days and writes slots and power once."""
+    _, api, runtime, coordinator = _base_coordinator()
+    current_slots = {day: [] for day in BatterySchedule.DAYS}
+    current_slots["Mon"] = [ScheduleSlot(1, 0, 1, "charge")]
+    current_slots["Wen"] = [ScheduleSlot(18, 30, 2, "discharge")]
+    replacement = [ScheduleSlot(8, 0, 1, "charge")]
+    api.get_schedule.return_value = {
+        "raw": {"Mon": [1], "Wen": [2], "Pin": 1000, "Pout": 2000},
+        "slots": current_slots,
+        "Pin": 1000,
+        "Pout": 2000,
+    }
+
+    await coordinator.replace_battery_schedule_day(
+        "bat",
+        "Tus",
+        replacement,
+        pin=3000,
+    )
+
+    api.get_schedule.assert_awaited_once()
+    api.set_schedule_slots.assert_awaited_once_with(
+        {
+            "Mon": [ScheduleSlot(1, 0, 1, "charge").to_raw()],
+            "Tus": [ScheduleSlot(8, 0, 1, "charge").to_raw()],
+            "Wen": [ScheduleSlot(18, 30, 2, "discharge").to_raw()],
+            "Pin": 3000,
+            "Pout": 2000,
+        }
+    )
+    runtime.coordinator.async_request_refresh.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_replace_battery_schedule_day_rejects_incomplete_read() -> None:
+    """An incomplete schedule read never causes a destructive replacement."""
+    _, api, _runtime, coordinator = _base_coordinator()
+    api.get_schedule.return_value = {
+        "raw": {"Mon": [1]},
+        "slots": {"Mon": [ScheduleSlot(1, 0, 1, "charge")]},
+    }
+
+    with pytest.raises(HomeAssistantError) as exc_info:
+        await coordinator.replace_battery_schedule_day("bat", "Mon", [])
+
+    _assert_translated_exception(
+        exc_info.value,
+        "battery_operation_failed",
+        {"error": "The inverter returned an incomplete schedule"},
+    )
+    api.set_schedule_slots.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
