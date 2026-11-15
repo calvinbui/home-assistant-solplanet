@@ -239,6 +239,34 @@ async def test_replace_schedule_day_validates_and_forwards_slots_and_power() -> 
     )
 
 
+@pytest.mark.parametrize("power_field", ["pin", "pout"])
+async def test_replace_schedule_day_rejects_power_above_inverter_rating(
+    power_field: str,
+) -> None:
+    """Optional schedule power values cannot exceed the inverter rating."""
+    _hass, registry, coordinator = await _setup_services()
+    coordinator.get_max_inverter_rate_w = Mock(return_value=2000)
+    call = _call(
+        device_id="battery-device",
+        day="Mon",
+        slots=[],
+        **{power_field: 2100},
+    )
+
+    with (
+        patch.object(services, "get_isn_from_target", AsyncMock(return_value=["bat-1"])),
+        pytest.raises(ServiceValidationError) as exc_info,
+    ):
+        await registry.handlers["replace_schedule_day"](call)
+
+    _assert_translated_exception(
+        exc_info.value,
+        "target_exceeds_rated_power",
+        {"max_rate": "2000"},
+    )
+    coordinator.replace_battery_schedule_day.assert_not_awaited()
+
+
 async def test_replace_schedule_day_rejects_overlaps_without_writing() -> None:
     """Overlapping or invalid replacement slots fail before a device write."""
     _hass, registry, coordinator = await _setup_services()
@@ -291,8 +319,9 @@ async def test_replace_schedule_day_schema_rejects_unsafe_values() -> None:
             }
         ],
     }
+    assert schema({**base, "pin": 150})["pin"] == 150
     with pytest.raises(vol.Invalid):
-        schema({**base, "pin": 150})
+        schema({**base, "pin": 10001})
     with pytest.raises(vol.Invalid):
         schema({**base, "slots": [{**base["slots"][0], "start_hour": 8.5}]})
     with pytest.raises(vol.Invalid):

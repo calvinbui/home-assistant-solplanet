@@ -38,7 +38,10 @@ Each **Set Schedule Slots** call adds one slot to the schedule currently loaded 
 
 For automation-managed schedules, use **Replace Schedule Day** to send the complete list of slots for one day in one Home Assistant action. The integration reads the current schedule immediately before writing, keeps the other days, and can include optional Schedule Input Power (`pin`) and Schedule Output Power (`pout`) values in the same API write. Use an empty `slots` list to clear only the selected day. This removes the empty intermediate schedule created by separate clear-and-add actions. The integration makes one device write, but cannot guarantee that inverter firmware applies that write transactionally.
 
-Each replacement slot has `start_hour` (0-23), `start_minute` (0 or 30), `duration` (1-4 whole hours), and `mode` (`charge` or `discharge`). A day can contain at most six non-overlapping slots; no slot may cross midnight. Optional power values must be between 0 and 10000 W in 100 W steps.
+Each replacement slot has `start_hour` (0-23), `start_minute` (0 or 30), `duration` (1-4 whole
+hours), and `mode` (`charge` or `discharge`). A day can contain at most six non-overlapping slots;
+no slot may cross midnight. Optional power values are whole watts and may not exceed the inverter's
+rated power.
 
 For example, the action data below replaces Monday with one charging and one discharging period:
 

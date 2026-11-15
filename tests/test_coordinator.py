@@ -640,16 +640,21 @@ async def test_battery_schedule_writes() -> None:
 
 
 @pytest.mark.asyncio
-async def test_replace_battery_schedule_day_uses_fresh_schedule_and_reads_back() -> None:
-    """Replacement preserves freshly read other days and writes slots and power once."""
+async def test_replace_battery_schedule_day_uses_fresh_schedule_and_requests_refresh() -> None:
+    """Replacement preserves the live schedule and requests metadata refresh after one write."""
     _, api, runtime, coordinator = _base_coordinator()
-    current_slots = {day: [] for day in BatterySchedule.DAYS}
-    current_slots["Mon"] = [ScheduleSlot(1, 0, 1, "charge")]
-    current_slots["Wen"] = [ScheduleSlot(18, 30, 2, "discharge")]
+    monday_slot = ScheduleSlot(1, 0, 1, "charge")
+    wednesday_slot = ScheduleSlot(18, 30, 2, "discharge")
+    raw_schedule = {
+        "Mon": [monday_slot.to_raw()],
+        "Wen": [wednesday_slot.to_raw()],
+        "Pin": 1000,
+        "Pout": 2000,
+    }
     replacement = [ScheduleSlot(8, 0, 1, "charge")]
     api.get_schedule.return_value = {
-        "raw": {"Mon": [1], "Wen": [2], "Pin": 1000, "Pout": 2000},
-        "slots": current_slots,
+        "raw": raw_schedule,
+        "slots": BatterySchedule.decode_schedule(raw_schedule),
         "Pin": 1000,
         "Pout": 2000,
     }
@@ -671,16 +676,41 @@ async def test_replace_battery_schedule_day_uses_fresh_schedule_and_reads_back()
             "Pout": 2000,
         }
     )
+    await asyncio.sleep(0)
     runtime.coordinator.async_request_refresh.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_replace_battery_schedule_day_rejects_incomplete_read() -> None:
-    """An incomplete schedule read never causes a destructive replacement."""
+async def test_replace_battery_schedule_day_accepts_empty_schedule_reply() -> None:
+    """A valid empty schedule retains its power settings and accepts the replacement."""
+    _, api, runtime, coordinator = _base_coordinator()
+    empty_raw_schedule = BatterySchedule.encode_schedule({}, pin=1000, pout=2000)
+    api.get_schedule.return_value = {
+        "raw": empty_raw_schedule,
+        "slots": BatterySchedule.decode_schedule(empty_raw_schedule),
+        "Pin": 1000,
+        "Pout": 2000,
+    }
+
+    replacement = [ScheduleSlot(8, 0, 1, "charge")]
+    await coordinator.replace_battery_schedule_day("bat", "Mon", replacement)
+
+    api.set_schedule_slots.assert_awaited_once_with(
+        {"Mon": [replacement[0].to_raw()], "Pin": 1000, "Pout": 2000}
+    )
+    await asyncio.sleep(0)
+    runtime.coordinator.async_request_refresh.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_replace_battery_schedule_day_rejects_empty_raw_reply() -> None:
+    """An empty raw reply is not mistaken for a valid seven-day empty schedule."""
     _, api, _runtime, coordinator = _base_coordinator()
     api.get_schedule.return_value = {
-        "raw": {"Mon": [1]},
-        "slots": {"Mon": [ScheduleSlot(1, 0, 1, "charge")]},
+        "raw": {},
+        "slots": BatterySchedule.decode_schedule({}),
+        "Pin": 0,
+        "Pout": 0,
     }
 
     with pytest.raises(HomeAssistantError) as exc_info:
@@ -689,7 +719,7 @@ async def test_replace_battery_schedule_day_rejects_incomplete_read() -> None:
     _assert_translated_exception(
         exc_info.value,
         "battery_operation_failed",
-        {"error": "The inverter returned an incomplete schedule"},
+        {"error": "The inverter returned an empty or malformed schedule"},
     )
     api.set_schedule_slots.assert_not_awaited()
 

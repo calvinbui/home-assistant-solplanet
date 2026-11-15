@@ -34,13 +34,6 @@ def _coerce_schedule_int(value: object) -> int:
     raise vol.Invalid("Expected an integer")
 
 
-def _multiple_of_100(value: int) -> int:
-    """Require schedule power values to use the inverter's 100 W step."""
-    if value % 100:
-        raise vol.Invalid("Value must be a multiple of 100")
-    return value
-
-
 _REPLACE_SCHEDULE_SLOT_SCHEMA = vol.Schema(
     {
         vol.Required("start_hour"): vol.All(_coerce_schedule_int, vol.Range(min=0, max=23)),
@@ -53,7 +46,6 @@ _REPLACE_SCHEDULE_SLOT_SCHEMA = vol.Schema(
 _SCHEDULE_POWER_SCHEMA = vol.All(
     _coerce_schedule_int,
     vol.Range(min=0, max=10000),
-    _multiple_of_100,
 )
 
 
@@ -153,11 +145,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
         try:
             slots = [ScheduleSlot.from_dict(slot_data) for slot_data in call.data["slots"]]
-            if len(slots) > 6:
-                raise ServiceValidationError(
-                    translation_domain=DOMAIN,
-                    translation_key="schedule_slot_limit",
-                )
             ScheduleSlot.validate_slots(slots)
         except ValueError as err:
             raise ServiceValidationError(
@@ -173,6 +160,14 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 (identifier for identifier in isns if identifier in coordinator.data[BATTERY_IDENTIFIER]),
                 None,
             ):
+                max_rate = coordinator.get_max_inverter_rate_w()
+                for power in (call.data.get("pin"), call.data.get("pout")):
+                    if power is not None and power > max_rate:
+                        raise ServiceValidationError(
+                            translation_domain=DOMAIN,
+                            translation_key="target_exceeds_rated_power",
+                            translation_placeholders={"max_rate": str(max_rate)},
+                        )
                 await coordinator.replace_battery_schedule_day(
                     isn,
                     call.data["day"],

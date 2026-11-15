@@ -24,25 +24,27 @@ replace_schedule_day:
       name: Slots
       description: List of slots with start_hour, start_minute, duration, and mode fields. Use an empty list to clear the day.
       required: true
+      selector:
+        object: {}
     pin:
       name: Schedule Input Power
-      description: Optional charging power in watts (0-10000, in 100 W steps).
+      description: Optional charging power in whole watts, up to inverter rated power.
       required: false
       selector:
         number:
           min: 0
           max: 10000
-          step: 100
+          step: 1
           mode: box
     pout:
       name: Schedule Output Power
-      description: Optional discharging power in watts (0-10000, in 100 W steps).
+      description: Optional discharging power in whole watts, up to inverter rated power.
       required: false
       selector:
         number:
           min: 0
           max: 10000
-          step: 100
+          step: 1
           mode: box
 
 set_schedule_slots:
