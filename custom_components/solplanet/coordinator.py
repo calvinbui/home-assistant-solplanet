@@ -490,16 +490,8 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
 
                 raw_schedule = BatterySchedule.encode_schedule(
                     new_slots,
-                    pin=(
-                        pin
-                        if pin is not None
-                        else current["raw"].get("Pin", current.get("Pin", 0))
-                    ),
-                    pout=(
-                        pout
-                        if pout is not None
-                        else current["raw"].get("Pout", current.get("Pout", 0))
-                    ),
+                    pin=(pin if pin is not None else current["raw"].get("Pin", current.get("Pin", 0))),
+                    pout=(pout if pout is not None else current["raw"].get("Pout", current.get("Pout", 0))),
                 )
                 _LOGGER.debug("Replacing schedule day %s for %s", day, sn)
                 await self.__api.set_schedule_slots(raw_schedule)
