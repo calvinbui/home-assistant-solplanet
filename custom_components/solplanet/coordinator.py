@@ -471,15 +471,24 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
                 current = await self.__api.get_schedule()
                 current_slots = current["slots"]
                 raw_schedule = current.get("raw")
-                raw_days = (
-                    [schedule_day for schedule_day in BatterySchedule.DAYS if schedule_day in raw_schedule]
-                    if isinstance(raw_schedule, dict)
-                    else []
-                )
+                required_keys = {"Pin", "Pout", *BatterySchedule.DAYS}
                 if (
                     not isinstance(raw_schedule, dict)
-                    or not (raw_days or {"Pin", "Pout"}.issubset(raw_schedule))
-                    or any(not isinstance(raw_schedule[schedule_day], list) for schedule_day in raw_days)
+                    or not required_keys.issubset(raw_schedule)
+                    or any(
+                        not isinstance(raw_schedule[schedule_day], list)
+                        or len(raw_schedule[schedule_day]) != 6
+                        or any(
+                            not isinstance(code, int) or isinstance(code, bool)
+                            for code in raw_schedule[schedule_day]
+                        )
+                        for schedule_day in BatterySchedule.DAYS
+                    )
+                    or any(
+                        not isinstance(raw_schedule[power], int)
+                        or isinstance(raw_schedule[power], bool)
+                        for power in ("Pin", "Pout")
+                    )
                 ):
                     raise ValueError("The inverter returned an empty or malformed schedule")
 

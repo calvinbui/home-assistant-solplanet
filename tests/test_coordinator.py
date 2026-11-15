@@ -646,8 +646,9 @@ async def test_replace_battery_schedule_day_uses_fresh_schedule_and_requests_ref
     monday_slot = ScheduleSlot(1, 0, 1, "charge")
     wednesday_slot = ScheduleSlot(18, 30, 2, "discharge")
     raw_schedule = {
-        "Mon": [monday_slot.to_raw()],
-        "Wen": [wednesday_slot.to_raw()],
+        **{schedule_day: [0, 0, 0, 0, 0, 0] for schedule_day in BatterySchedule.DAYS},
+        "Mon": [monday_slot.to_raw(), 0, 0, 0, 0, 0],
+        "Wen": [wednesday_slot.to_raw(), 0, 0, 0, 0, 0],
         "Pin": 1000,
         "Pout": 2000,
     }
@@ -713,14 +714,32 @@ async def test_replace_battery_schedule_day_accepts_empty_schedule_reply() -> No
 
 
 @pytest.mark.asyncio
-async def test_replace_battery_schedule_day_rejects_empty_raw_reply() -> None:
-    """An empty raw reply is not mistaken for a valid seven-day empty schedule."""
+@pytest.mark.parametrize(
+    "raw_schedule",
+    [
+        {},
+        {"Pin": 0, "Pout": 0, "Mon": [0, 0, 0, 0, 0, 0]},
+        {
+            "Pin": 0,
+            "Pout": 0,
+            **{
+                schedule_day: [0] * (5 if schedule_day == "Mon" else 6)
+                for schedule_day in BatterySchedule.DAYS
+            },
+        },
+    ],
+    ids=["empty", "missing-days", "short-day-array"],
+)
+async def test_replace_battery_schedule_day_rejects_incomplete_raw_reply(
+    raw_schedule: dict,
+) -> None:
+    """Empty, partial, or truncated raw replies cannot erase days or power settings."""
     _, api, _runtime, coordinator = _base_coordinator()
     api.get_schedule.return_value = {
-        "raw": {},
-        "slots": BatterySchedule.decode_schedule({}),
-        "Pin": 0,
-        "Pout": 0,
+        "raw": raw_schedule,
+        "slots": BatterySchedule.decode_schedule(raw_schedule),
+        "Pin": raw_schedule.get("Pin", 0),
+        "Pout": raw_schedule.get("Pout", 0),
     }
 
     with pytest.raises(HomeAssistantError) as exc_info:
