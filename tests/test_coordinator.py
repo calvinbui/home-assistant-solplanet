@@ -682,21 +682,31 @@ async def test_replace_battery_schedule_day_uses_fresh_schedule_and_requests_ref
 
 @pytest.mark.asyncio
 async def test_replace_battery_schedule_day_accepts_empty_schedule_reply() -> None:
-    """A valid empty schedule retains its power settings and accepts the replacement."""
+    """A zero-filled inverter reply is recognized as a valid empty schedule."""
     _, api, runtime, coordinator = _base_coordinator()
-    empty_raw_schedule = BatterySchedule.encode_schedule({}, pin=1000, pout=2000)
+    empty_raw_schedule = {
+        "Pin": 0,
+        "Pout": 0,
+        "Sun": [0, 0, 0, 0, 0, 0],
+        "Mon": [0, 0, 0, 0, 0, 0],
+        "Tus": [0, 0, 0, 0, 0, 0],
+        "Wen": [0, 0, 0, 0, 0, 0],
+        "Thu": [0, 0, 0, 0, 0, 0],
+        "Fri": [0, 0, 0, 0, 0, 0],
+        "Sat": [0, 0, 0, 0, 0, 0],
+    }
     api.get_schedule.return_value = {
         "raw": empty_raw_schedule,
         "slots": BatterySchedule.decode_schedule(empty_raw_schedule),
-        "Pin": 1000,
-        "Pout": 2000,
+        "Pin": 0,
+        "Pout": 0,
     }
 
     replacement = [ScheduleSlot(8, 0, 1, "charge")]
     await coordinator.replace_battery_schedule_day("bat", "Mon", replacement)
 
     api.set_schedule_slots.assert_awaited_once_with(
-        {"Mon": [replacement[0].to_raw()], "Pin": 1000, "Pout": 2000}
+        {"Mon": [replacement[0].to_raw()], "Pin": 0, "Pout": 0}
     )
     await asyncio.sleep(0)
     runtime.coordinator.async_request_refresh.assert_awaited_once()
