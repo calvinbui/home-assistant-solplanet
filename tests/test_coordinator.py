@@ -727,8 +727,21 @@ async def test_replace_battery_schedule_day_accepts_empty_schedule_reply() -> No
                 for schedule_day in BatterySchedule.DAYS
             },
         },
+        {
+            "Pin": 0,
+            "Pout": 0,
+            **{
+                schedule_day: [True, 0, 0, 0, 0, 0] if schedule_day == "Mon" else [0] * 6
+                for schedule_day in BatterySchedule.DAYS
+            },
+        },
+        {
+            "Pin": "0",
+            "Pout": 0,
+            **{schedule_day: [0] * 6 for schedule_day in BatterySchedule.DAYS},
+        },
     ],
-    ids=["empty", "missing-days", "short-day-array"],
+    ids=["empty", "missing-days", "short-day-array", "boolean-slot", "invalid-power"],
 )
 async def test_replace_battery_schedule_day_rejects_incomplete_raw_reply(
     raw_schedule: dict,

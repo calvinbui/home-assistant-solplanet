@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from time import monotonic
-from typing import Any, cast, override
+from typing import Any, TypeGuard, cast, override
 
 from aiohttp import ClientResponseError
 from homeassistant.config_entries import ConfigEntry
@@ -49,6 +49,27 @@ FAILED_UPDATE_INTERVAL = timedelta(minutes=10)
 MAX_FAILED_UPDATES = 3
 
 type SolplanetData = dict[str, dict[str, dict[str, Any]]]
+
+
+def _is_complete_raw_schedule(raw_schedule: object) -> TypeGuard[dict[str, Any]]:
+    """Return whether a raw inverter response contains every schedule field."""
+    if not isinstance(raw_schedule, dict):
+        return False
+
+    required_keys = {"Pin", "Pout", *BatterySchedule.DAYS}
+    return (
+        required_keys.issubset(raw_schedule)
+        and all(
+            isinstance(raw_schedule[day], list)
+            and len(raw_schedule[day]) == 6
+            and all(isinstance(code, int) and not isinstance(code, bool) for code in raw_schedule[day])
+            for day in BatterySchedule.DAYS
+        )
+        and all(
+            isinstance(raw_schedule[power], int) and not isinstance(raw_schedule[power], bool)
+            for power in ("Pin", "Pout")
+        )
+    )
 
 
 def _empty_data() -> SolplanetData:
@@ -471,25 +492,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
                 current = await self.__api.get_schedule()
                 current_slots = current["slots"]
                 raw_schedule = current.get("raw")
-                required_keys = {"Pin", "Pout", *BatterySchedule.DAYS}
-                if (
-                    not isinstance(raw_schedule, dict)
-                    or not required_keys.issubset(raw_schedule)
-                    or any(
-                        not isinstance(raw_schedule[schedule_day], list)
-                        or len(raw_schedule[schedule_day]) != 6
-                        or any(
-                            not isinstance(code, int) or isinstance(code, bool)
-                            for code in raw_schedule[schedule_day]
-                        )
-                        for schedule_day in BatterySchedule.DAYS
-                    )
-                    or any(
-                        not isinstance(raw_schedule[power], int)
-                        or isinstance(raw_schedule[power], bool)
-                        for power in ("Pin", "Pout")
-                    )
-                ):
+                if not _is_complete_raw_schedule(raw_schedule):
                     raise ValueError("The inverter returned an empty or malformed schedule")
 
                 new_slots = {
@@ -497,13 +500,13 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
                 }
                 new_slots[day] = list(slots)
 
-                raw_schedule = BatterySchedule.encode_schedule(
+                encoded_schedule = BatterySchedule.encode_schedule(
                     new_slots,
-                    pin=(pin if pin is not None else current["raw"].get("Pin", current.get("Pin", 0))),
-                    pout=(pout if pout is not None else current["raw"].get("Pout", current.get("Pout", 0))),
+                    pin=pin if pin is not None else current["Pin"],
+                    pout=pout if pout is not None else current["Pout"],
                 )
                 _LOGGER.debug("Replacing schedule day %s for %s", day, sn)
-                await self.__api.set_schedule_slots(raw_schedule)
+                await self.__api.set_schedule_slots(encoded_schedule)
             self.hass.async_create_task(self.runtime.async_request_metadata_refresh())
         except NotImplementedError as err:
             raise HomeAssistantError(
