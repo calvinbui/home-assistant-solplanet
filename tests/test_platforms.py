@@ -124,6 +124,7 @@ async def test_number_catalog_values_callbacks_and_capabilities() -> None:
     schedule_entity = number.SolplanetNumber(schedule_power, "bat-1", coordinator)
     soc_entity = number.SolplanetNumber(soc, "bat-1", coordinator)
     assert schedule_entity.native_max_value == 5000
+    assert schedule_entity.native_step == 1
     assert soc_entity.native_max_value == 100
     await soc_entity.async_set_native_value(82.9)
     coordinator.set_battery_soc_max.assert_awaited_once_with("bat-1", 82)
