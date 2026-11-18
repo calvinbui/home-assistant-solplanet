@@ -330,6 +330,38 @@ async def test_replace_schedule_day_schema_rejects_unsafe_values() -> None:
         schema({**base, "slots": [{**base["slots"][0], "start_minute": 0.5}]})
     with pytest.raises(vol.Invalid):
         schema({**base, "slots": base["slots"] * 7})
+    coerced = schema({**base, "slots": [{**base["slots"][0], "start_hour": 8.0, "duration": "2"}]})
+    assert coerced["slots"][0]["start_hour"] == 8
+    assert coerced["slots"][0]["duration"] == 2
+    for invalid in (True, "eight", None):
+        with pytest.raises(vol.Invalid):
+            schema({**base, "slots": [{**base["slots"][0], "start_hour": invalid}]})
+
+
+async def test_replace_schedule_day_rejects_unknown_targets() -> None:
+    """Replacement fails before a write when no battery target matches."""
+    _hass, registry, coordinator = await _setup_services()
+    handler = registry.handlers["replace_schedule_day"]
+    call = _call(device_id="battery-device", day="Mon", slots=[])
+
+    with (
+        patch.object(services, "get_isn_from_target", AsyncMock(return_value=[])),
+        pytest.raises(ServiceValidationError) as exc_info,
+    ):
+        await handler(call)
+    _assert_translated_exception(exc_info.value, "no_valid_battery_targets")
+
+    with (
+        patch.object(services, "get_isn_from_target", AsyncMock(return_value=["missing"])),
+        pytest.raises(ServiceValidationError) as exc_info,
+    ):
+        await handler(call)
+    _assert_translated_exception(
+        exc_info.value,
+        "battery_coordinator_not_found",
+        {"identifiers": "missing"},
+    )
+    coordinator.replace_battery_schedule_day.assert_not_awaited()
 
 
 async def test_set_schedule_slots_updates_copy_and_validates_failures() -> None:

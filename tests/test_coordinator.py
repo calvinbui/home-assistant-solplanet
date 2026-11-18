@@ -766,6 +766,31 @@ async def test_replace_battery_schedule_day_rejects_incomplete_raw_reply(
     api.set_schedule_slots.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_replace_battery_schedule_day_rejects_non_dict_reply_and_v1() -> None:
+    """A non-dict reply is rejected and V1 reports the operation as unsupported."""
+    _, api, _runtime, coordinator = _base_coordinator()
+    api.get_schedule.return_value = {
+        "raw": None,
+        "slots": BatterySchedule.decode_schedule({}),
+        "Pin": 0,
+        "Pout": 0,
+    }
+    with pytest.raises(HomeAssistantError) as exc_info:
+        await coordinator.replace_battery_schedule_day("bat", "Mon", [])
+    _assert_translated_exception(
+        exc_info.value,
+        "battery_operation_failed",
+        {"error": "The inverter returned an empty or malformed schedule"},
+    )
+
+    api.get_schedule.side_effect = NotImplementedError
+    with pytest.raises(HomeAssistantError) as exc_info:
+        await coordinator.replace_battery_schedule_day("bat", "Mon", [])
+    _assert_translated_exception(exc_info.value, "battery_operation_unsupported_v1")
+    api.set_schedule_slots.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     ("payload", "expected"),
     [
