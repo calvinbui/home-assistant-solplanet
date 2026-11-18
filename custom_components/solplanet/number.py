@@ -107,7 +107,7 @@ def create_battery_entities_description(
             data_field_path=["Pin"],  # Changed to use dict key
             native_min_value=0,
             native_max_value=10000,
-            native_step=100,
+            native_step=1,
             native_unit_of_measurement=UnitOfPower.WATT,
             callback=lambda value: coordinator.set_battery_schedule_pin(isn, int(value)),
         ),
@@ -120,7 +120,7 @@ def create_battery_entities_description(
             data_field_path=["Pout"],  # Changed to use dict key
             native_min_value=0,
             native_max_value=10000,
-            native_step=100,
+            native_step=1,
             native_unit_of_measurement=UnitOfPower.WATT,
             callback=lambda value: coordinator.set_battery_schedule_pout(isn, int(value)),
         ),

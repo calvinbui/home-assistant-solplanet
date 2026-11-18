@@ -71,6 +71,7 @@ Available actions are:
 | Action name | Action ID | Use |
 | --- | --- | --- |
 | Set Schedule Slots | `solplanet.set_schedule_slots` | Add one charge or discharge period |
+| Replace Schedule Day | `solplanet.replace_schedule_day` | Replace one day's complete slot list in one API write, preserving the other days |
 | Clear Schedule | `solplanet.clear_schedule` | Clear one day or the full schedule |
 | Enable power limit control (Limit power) | `solplanet.set_meter_limit_power` | Limit grid export by watts or percentage |
 | Enable power limit control (Limit current) | `solplanet.set_meter_limit_current` | Limit inverter grid import and export current |
