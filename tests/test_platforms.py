@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -15,7 +15,6 @@ from custom_components.solplanet.const import (
     INVERTER_IDENTIFIER,
 )
 from custom_components.solplanet.entity import SolplanetEntity
-
 from tests.helpers import FakeCoordinator, FakeEntry, integration_data
 
 
@@ -44,9 +43,7 @@ def test_binary_sensor_descriptions_mappers_and_attributes() -> None:
     assert schedule.data_field_value_mapper("invalid") is None
     assert schedule.data_field_value_mapper({}) is False
     assert schedule.data_field_value_mapper({"Mon": [0, 1]}) is True
-    attrs = schedule.attributes_fn(
-        coordinator.data[BATTERY_IDENTIFIER]["bat-1"]["schedule"]
-    )
+    attrs = schedule.attributes_fn(coordinator.data[BATTERY_IDENTIFIER]["bat-1"]["schedule"])
     assert attrs["raw_schedule"] == {"Mon": [1]}
     assert attrs["formatted_schedule"]["Mon"] == ["01:00 - 02:00 (charge)"]
     assert attrs["pin"] == 1000
@@ -64,9 +61,7 @@ def test_binary_sensor_descriptions_mappers_and_attributes() -> None:
 async def test_binary_sensor_setup_and_discovery(version: str, expected: int) -> None:
     """Platform setup imports both catalogs and adds genuinely new devices once."""
     coordinator = FakeCoordinator()
-    entry, discover, added = await _setup_platform(
-        binary_sensor, coordinator, version=version
-    )
+    entry, discover, added = await _setup_platform(binary_sensor, coordinator, version=version)
     assert len(added) == expected
     assert entry.unloads
 
@@ -76,9 +71,7 @@ async def test_binary_sensor_setup_and_discovery(version: str, expected: int) ->
     discover(entry.entry_id, BATTERY_IDENTIFIER, {"bat-1"})
     assert len(added) == before
 
-    coordinator.data[BATTERY_IDENTIFIER]["bat-2"] = deepcopy(
-        coordinator.data[BATTERY_IDENTIFIER]["bat-1"]
-    )
+    coordinator.data[BATTERY_IDENTIFIER]["bat-2"] = deepcopy(coordinator.data[BATTERY_IDENTIFIER]["bat-1"])
     discover(entry.entry_id, BATTERY_IDENTIFIER, {"bat-1", "bat-2"})
     assert len(added) == before + 1
 
@@ -117,9 +110,7 @@ async def test_number_catalog_values_callbacks_and_capabilities() -> None:
     coordinator = FakeCoordinator()
     descriptions = number.create_battery_entities_description(coordinator, "bat-1")
     assert len(descriptions) == 5
-    schedule_power = next(
-        item for item in descriptions if item.key.endswith("schedule_pin")
-    )
+    schedule_power = next(item for item in descriptions if item.key.endswith("schedule_pin"))
     soc = next(item for item in descriptions if item.key.endswith("soc_max"))
     schedule_entity = number.SolplanetNumber(schedule_power, "bat-1", coordinator)
     soc_entity = number.SolplanetNumber(soc, "bat-1", coordinator)
@@ -145,9 +136,7 @@ async def test_number_setup_discovery_deduplication_and_late_metadata() -> None:
     discover(entry.entry_id, BATTERY_IDENTIFIER, {"bat-1"})
     assert len(added) == 4
 
-    coordinator.data[BATTERY_IDENTIFIER]["bat-2"] = deepcopy(
-        coordinator.data[BATTERY_IDENTIFIER]["bat-1"]
-    )
+    coordinator.data[BATTERY_IDENTIFIER]["bat-2"] = deepcopy(coordinator.data[BATTERY_IDENTIFIER]["bat-1"])
     discover(entry.entry_id, BATTERY_IDENTIFIER, {"bat-2"})
     assert len(added) == 8
 
@@ -191,17 +180,13 @@ async def test_select_options_mapping_selection_and_refresh() -> None:
     parent.assert_called_once_with()
     assert entity.options[-1] == "Peak shaving"
 
-    coordinator.data[BATTERY_IDENTIFIER]["bat-1"]["more_settings"][
-        "led_color_index"
-    ] = 9
+    coordinator.data[BATTERY_IDENTIFIER]["bat-1"]["more_settings"]["led_color_index"] = 9
     led_options = led.get_options()
     assert led_options[-1].label == "Index 9"
     assert led_options[-1].value == 9
 
     # A malformed/non-numeric current value must not pollute the fixed palette.
-    coordinator.data[BATTERY_IDENTIFIER]["bat-1"]["more_settings"][
-        "led_color_index"
-    ] = "invalid"
+    coordinator.data[BATTERY_IDENTIFIER]["bat-1"]["more_settings"]["led_color_index"] = "invalid"
     assert [option.value for option in led.get_options()] == [1, 2, 3, 4, 5]
 
     without_led = FakeCoordinator(integration_data(led_battery=False))
@@ -218,9 +203,7 @@ async def test_select_setup_discovery_deduplication_and_late_metadata() -> None:
     discover(entry.entry_id, BATTERY_IDENTIFIER, {"bat-1"})
     assert len(added) == 1
 
-    coordinator.data[BATTERY_IDENTIFIER]["bat-2"] = deepcopy(
-        coordinator.data[BATTERY_IDENTIFIER]["bat-1"]
-    )
+    coordinator.data[BATTERY_IDENTIFIER]["bat-2"] = deepcopy(coordinator.data[BATTERY_IDENTIFIER]["bat-1"])
     discover(entry.entry_id, BATTERY_IDENTIFIER, {"bat-2"})
     assert len(added) == 2
 
@@ -256,8 +239,6 @@ async def test_switch_catalog_state_actions_setup_and_discovery() -> None:
     discover(entry.entry_id, BATTERY_IDENTIFIER, {"bat-1"})
     assert len(added) == 3
 
-    coordinator.data[BATTERY_IDENTIFIER]["bat-2"] = deepcopy(
-        coordinator.data[BATTERY_IDENTIFIER]["bat-1"]
-    )
+    coordinator.data[BATTERY_IDENTIFIER]["bat-2"] = deepcopy(coordinator.data[BATTERY_IDENTIFIER]["bat-1"])
     discover(entry.entry_id, BATTERY_IDENTIFIER, {"bat-2"})
     assert len(added) == 5

@@ -11,12 +11,9 @@ import pytest
 from custom_components.solplanet import sensor
 from custom_components.solplanet.client import GetInverterDataResponse, GetMeterDataResponse
 from custom_components.solplanet.const import (
-    BATTERY_IDENTIFIER,
-    DONGLE_IDENTIFIER,
     INVERTER_IDENTIFIER,
     METER_IDENTIFIER,
 )
-
 from tests.helpers import FakeCoordinator, FakeEntry, integration_data
 
 
@@ -69,9 +66,7 @@ def test_meter_catalog_covers_v2_submeter_v1_and_limit_modes() -> None:
     coordinator = FakeCoordinator()
     main = sensor.create_meter_entities_description(coordinator, "meter-1")
     assert len(main) == 19
-    limit = next(
-        item for item in main if item.unique_id_suffix == "power_limit_control"
-    )
+    limit = next(item for item in main if item.unique_id_suffix == "power_limit_control")
     mapper = limit.data_field_value_mapper
     assert mapper(None) is None
     assert mapper({}) == "Disabled"
@@ -82,15 +77,24 @@ def test_meter_catalog_covers_v2_submeter_v1_and_limit_modes() -> None:
     assert mapper({"regulate": 10, "ctrlType": "bad"}) == "Enabled (unknown type)"
 
     modern_by_suffix = {item.unique_id_suffix: item for item in main}
-    assert sensor.SolplanetSensor(
-        modern_by_suffix["export_power_limit_setpoint"], "meter-1", coordinator
-    )._attr_native_value == 3000
-    assert sensor.SolplanetSensor(
-        modern_by_suffix["power_limit_phase_mode"], "meter-1", coordinator
-    )._attr_native_value == "Phase-balanced"
-    assert sensor.SolplanetSensor(
-        modern_by_suffix["communication_loss_timeout"], "meter-1", coordinator
-    )._attr_native_value == 60
+    assert (
+        sensor.SolplanetSensor(
+            modern_by_suffix["export_power_limit_setpoint"], "meter-1", coordinator
+        )._attr_native_value
+        == 3000
+    )
+    assert (
+        sensor.SolplanetSensor(
+            modern_by_suffix["power_limit_phase_mode"], "meter-1", coordinator
+        )._attr_native_value
+        == "Phase-balanced"
+    )
+    assert (
+        sensor.SolplanetSensor(
+            modern_by_suffix["communication_loss_timeout"], "meter-1", coordinator
+        )._attr_native_value
+        == 60
+    )
 
     coordinator.data[METER_IDENTIFIER]["sub-1"] = {"app_info": {"model": 1}}
     assert sensor.create_meter_entities_description(coordinator, "sub-1") == []
@@ -107,17 +111,24 @@ def test_meter_catalog_covers_v2_submeter_v1_and_limit_modes() -> None:
     legacy = sensor.create_meter_entities_description(coordinator, "v1")
     assert len(legacy) == 8
     legacy_by_suffix = {item.unique_id_suffix: item for item in legacy}
-    assert sensor.SolplanetSensor(
-        legacy_by_suffix["power_limit_control"], "v1", coordinator
-    )._attr_native_value == "Limit power"
-    assert sensor.SolplanetSensor(
-        legacy_by_suffix["power_limit_phase_mode"], "v1", coordinator
-    )._attr_native_value == "Phase-balanced"
-    assert sensor.SolplanetSensor(
-        legacy_by_suffix["export_power_limit_setpoint_percentage"],
-        "v1",
-        coordinator,
-    )._attr_native_value == 5
+    assert (
+        sensor.SolplanetSensor(legacy_by_suffix["power_limit_control"], "v1", coordinator)._attr_native_value
+        == "Limit power"
+    )
+    assert (
+        sensor.SolplanetSensor(
+            legacy_by_suffix["power_limit_phase_mode"], "v1", coordinator
+        )._attr_native_value
+        == "Phase-balanced"
+    )
+    assert (
+        sensor.SolplanetSensor(
+            legacy_by_suffix["export_power_limit_setpoint_percentage"],
+            "v1",
+            coordinator,
+        )._attr_native_value
+        == 5
+    )
     assert "export_power_limit_setpoint" not in legacy_by_suffix
 
     indexed = GetMeterDataResponse(
@@ -135,19 +146,13 @@ def test_meter_catalog_covers_v2_submeter_v1_and_limit_modes() -> None:
         coordinator,
         "indexed",
     )
-    power = next(
-        item for item in indexed_descriptions if item.unique_id_suffix == "submeter_power"
-    )
+    power = next(item for item in indexed_descriptions if item.unique_id_suffix == "submeter_power")
     assert power.data_field_path == ["pac"]
     assert sensor.SolplanetSensor(power, "indexed", coordinator)._attr_native_value == 0
     imported = next(
-        item
-        for item in indexed_descriptions
-        if item.unique_id_suffix == "submeter_energy_imported_total"
+        item for item in indexed_descriptions if item.unique_id_suffix == "submeter_energy_imported_total"
     )
-    assert sensor.SolplanetSensor(
-        imported, "indexed", coordinator
-    )._attr_native_value == pytest.approx(44.8)
+    assert sensor.SolplanetSensor(imported, "indexed", coordinator)._attr_native_value == pytest.approx(44.8)
 
 
 def test_dongle_and_battery_catalog_mappers() -> None:
@@ -171,9 +176,7 @@ def test_dongle_and_battery_catalog_mappers() -> None:
     assert status.data_field_value_mapper(999) == "Fault (code: 999)"
     errors = next(item for item in battery if item.unique_id_suffix == "eb1")
     assert (
-        errors.data_field_value_mapper(
-            SimpleNamespace(eb1=0xFFFF, eb2=0xFFFF, eb3=0xFFFF, eb4=0xFFFF)
-        )
+        errors.data_field_value_mapper(SimpleNamespace(eb1=0xFFFF, eb2=0xFFFF, eb3=0xFFFF, eb4=0xFFFF))
         == "No errors"
     )
 
@@ -200,9 +203,7 @@ async def _setup_sensor_platform(coordinator, *, inverter_listener: bool = True)
 async def test_sensor_setup_imports_full_catalog_and_discovers_devices() -> None:
     """Actual platform setup creates every device catalog and deduplicates discovery."""
     coordinator = FakeCoordinator()
-    entry, discover, added = await _setup_sensor_platform(
-        coordinator, inverter_listener=False
-    )
+    entry, discover, added = await _setup_sensor_platform(coordinator, inverter_listener=False)
     initial = len(added)
     assert initial > 80
     assert entry.unloads
@@ -212,9 +213,7 @@ async def test_sensor_setup_imports_full_catalog_and_discovers_devices() -> None
     discover(entry.entry_id, INVERTER_IDENTIFIER, {"inv-1"})
     assert len(added) == initial
 
-    coordinator.data[METER_IDENTIFIER]["meter-2"] = deepcopy(
-        coordinator.data[METER_IDENTIFIER]["meter-1"]
-    )
+    coordinator.data[METER_IDENTIFIER]["meter-2"] = deepcopy(coordinator.data[METER_IDENTIFIER]["meter-1"])
     discover(entry.entry_id, METER_IDENTIFIER, {"meter-2"})
     assert len(added) > initial
 

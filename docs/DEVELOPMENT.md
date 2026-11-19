@@ -48,13 +48,17 @@ The initial startup may take a minute or two. You can monitor the startup progre
 
 ## Validation
 
-Install the development dependencies and run the same typing and coverage gates used for changes:
+Install the development dependencies and run the same lint, typing and coverage gates as CI:
 
 ```bash
 python -m pip install -r requirements_test.txt
-python -m mypy custom_components/solplanet
-pytest -q --cov --cov-report=term-missing
+ruff check .
+ruff format --check .
+mypy
+pytest -q --cov=custom_components.solplanet --cov-branch --cov-report=term-missing --cov-fail-under=100
 ```
+
+Run `ruff check --fix .` and `ruff format .` to apply fixes automatically.
 
 Home Assistant's broader testing guidance is available in [Testing your code](https://developers.home-assistant.io/docs/development_testing/).
 

@@ -7,8 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-import pytest
 import probatio
+import pytest
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_MAC
 from homeassistant.data_entry_flow import FlowResultType
@@ -22,8 +22,8 @@ from pytest_homeassistant.common import (
 
 import custom_components.solplanet as integration
 from custom_components.solplanet.config_flow import (
-    CannotConnect,
     STEP_USER_DATA_SCHEMA,
+    CannotConnect,
     SolplanetConfigFlow,
     SolplanetOptionsFlow,
     validate_input,
@@ -35,7 +35,6 @@ from custom_components.solplanet.const import (
     DOMAIN,
     DONGLE_IDENTIFIER,
 )
-
 from tests.helpers import FakeCoordinator, integration_data
 
 
@@ -78,18 +77,8 @@ def _dhcp_info(
 def test_interval_schema_accepts_defaults_and_supported_bounds() -> None:
     """The polling interval is coerced and constrained."""
     assert STEP_USER_DATA_SCHEMA({CONF_HOST: "inverter.local"})[CONF_INTERVAL] == 60
-    assert (
-        STEP_USER_DATA_SCHEMA({CONF_HOST: "inverter.local", CONF_INTERVAL: "10"})[
-            CONF_INTERVAL
-        ]
-        == 10
-    )
-    assert (
-        STEP_USER_DATA_SCHEMA({CONF_HOST: "inverter.local", CONF_INTERVAL: 3600})[
-            CONF_INTERVAL
-        ]
-        == 3600
-    )
+    assert STEP_USER_DATA_SCHEMA({CONF_HOST: "inverter.local", CONF_INTERVAL: "10"})[CONF_INTERVAL] == 10
+    assert STEP_USER_DATA_SCHEMA({CONF_HOST: "inverter.local", CONF_INTERVAL: 3600})[CONF_INTERVAL] == 3600
 
 
 @pytest.mark.parametrize("interval", [9, 3601, "not-a-number"])
@@ -104,9 +93,7 @@ async def test_validate_input_v2_prefers_dongle_identity(hass, user_input) -> No
     api = SimpleNamespace(
         version="v2",
         client=SimpleNamespace(get=AsyncMock(return_value={"psn": "PSN-1"})),
-        get_inverter_info=AsyncMock(
-            return_value=SimpleNamespace(inv=[SimpleNamespace(isn="INV-1")])
-        ),
+        get_inverter_info=AsyncMock(return_value=SimpleNamespace(inv=[SimpleNamespace(isn="INV-1")])),
     )
     with (
         patch("custom_components.solplanet.config_flow.SolplanetClient"),
@@ -164,9 +151,7 @@ async def test_validate_input_falls_back_to_inverter_or_host(hass, user_input) -
     api = SimpleNamespace(
         version="v2",
         client=SimpleNamespace(get=AsyncMock(side_effect=RuntimeError("offline"))),
-        get_inverter_info=AsyncMock(
-            return_value=SimpleNamespace(inv=[SimpleNamespace(isn="INV-1")])
-        ),
+        get_inverter_info=AsyncMock(return_value=SimpleNamespace(inv=[SimpleNamespace(isn="INV-1")])),
     )
     with (
         patch("custom_components.solplanet.config_flow.SolplanetClient"),
@@ -224,9 +209,7 @@ async def test_user_flow_success_and_duplicate_update(hass, user_input) -> None:
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
         assert form["type"] is FlowResultType.FORM
-        result = await hass.config_entries.flow.async_configure(
-            form["flow_id"], user_input
-        )
+        result = await hass.config_entries.flow.async_configure(form["flow_id"], user_input)
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "inverter.local"
@@ -251,9 +234,7 @@ async def test_user_flow_success_and_duplicate_update(hass, user_input) -> None:
     ("error", "reason"),
     [(CannotConnect(), "cannot_connect"), (RuntimeError("surprise"), "unknown")],
 )
-async def test_user_flow_reports_validation_errors(
-    hass, user_input, error, reason
-) -> None:
+async def test_user_flow_reports_validation_errors(hass, user_input, error, reason) -> None:
     """Expected and unexpected validation errors return the appropriate form error."""
     with patch(
         "custom_components.solplanet.config_flow.validate_input",
@@ -271,12 +252,7 @@ async def test_user_flow_reports_validation_errors(
 def test_manifest_enables_verified_dhcp_discovery_and_registered_updates() -> None:
     """The manifest supports current AISWEI hardware and configured MACs."""
     manifest = json.loads(
-        (
-            Path(__file__).parents[1]
-            / "custom_components"
-            / "solplanet"
-            / "manifest.json"
-        ).read_text()
+        (Path(__file__).parents[1] / "custom_components" / "solplanet" / "manifest.json").read_text()
     )
     assert manifest["dhcp"] == [
         {"macaddress": "C0482F2*"},
@@ -529,9 +505,7 @@ async def test_options_flow_shows_current_value_and_updates_entry(hass, enabled:
     """The options flow persists the selected interval and reloads the entry."""
     entry = _entry(interval=30)
     entry.add_to_hass(hass)
-    with patch.object(
-        hass.config_entries, "async_reload", AsyncMock(return_value=True)
-    ) as reload:
+    with patch.object(hass.config_entries, "async_reload", AsyncMock(return_value=True)) as reload:
         form = await hass.config_entries.options.async_init(entry.entry_id)
         assert form["type"] is FlowResultType.FORM
         assert form["data_schema"]({})[CONF_INTERVAL] == 30
@@ -589,17 +563,9 @@ async def test_reconfigure_validates_and_updates_existing_entry(
             },
         )
         assert form["type"] is FlowResultType.FORM
-        assert (
-            get_schema_suggested_value(form["data_schema"].schema, CONF_HOST)
-            == "old.local"
-        )
-        assert (
-            get_schema_suggested_value(form["data_schema"].schema, CONF_INTERVAL)
-            == 45
-        )
-        result = await hass.config_entries.flow.async_configure(
-            form["flow_id"], new_data
-        )
+        assert get_schema_suggested_value(form["data_schema"].schema, CONF_HOST) == "old.local"
+        assert get_schema_suggested_value(form["data_schema"].schema, CONF_INTERVAL) == 45
+        result = await hass.config_entries.flow.async_configure(form["flow_id"], new_data)
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
@@ -656,26 +622,18 @@ async def test_reconfigure_recovers_from_validation_errors(
                 "entry_id": entry.entry_id,
             },
         )
-        failed = await hass.config_entries.flow.async_configure(
-            form["flow_id"], new_data
-        )
+        failed = await hass.config_entries.flow.async_configure(form["flow_id"], new_data)
 
         assert failed["type"] is FlowResultType.FORM
         assert failed["errors"] == {"base": reason}
+        assert get_schema_suggested_value(failed["data_schema"].schema, CONF_HOST) == new_data[CONF_HOST]
         assert (
-            get_schema_suggested_value(failed["data_schema"].schema, CONF_HOST)
-            == new_data[CONF_HOST]
-        )
-        assert (
-            get_schema_suggested_value(failed["data_schema"].schema, CONF_INTERVAL)
-            == new_data[CONF_INTERVAL]
+            get_schema_suggested_value(failed["data_schema"].schema, CONF_INTERVAL) == new_data[CONF_INTERVAL]
         )
         assert entry.data == original_data
         schedule_reload.assert_not_called()
 
-        result = await hass.config_entries.flow.async_configure(
-            failed["flow_id"], new_data
-        )
+        result = await hass.config_entries.flow.async_configure(failed["flow_id"], new_data)
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
@@ -721,9 +679,7 @@ async def test_reconfigure_upgrades_a_verified_legacy_identity(hass) -> None:
 
 
 @pytest.mark.parametrize("entry_unique_id", ["PSN-1", "old.local"])
-async def test_reconfigure_rejects_a_different_device(
-    hass, entry_unique_id: str
-) -> None:
+async def test_reconfigure_rejects_a_different_device(hass, entry_unique_id: str) -> None:
     """Reconfigure cannot redirect an entry to another Solplanet device."""
     entry = _entry(host="old.local", interval=45, unique_id=entry_unique_id)
     other_entry = _entry(host="other.local", interval=60, unique_id="PSN-2")
@@ -799,9 +755,7 @@ async def test_reconfigure_does_not_duplicate_a_stable_identity(hass) -> None:
 def test_options_flow_factory() -> None:
     """The config flow returns its dedicated options handler."""
     entry = _entry()
-    assert isinstance(
-        SolplanetConfigFlow.async_get_options_flow(entry), SolplanetOptionsFlow
-    )
+    assert isinstance(SolplanetConfigFlow.async_get_options_flow(entry), SolplanetOptionsFlow)
 
 
 async def test_config_entry_setup_registers_real_platform_entities(hass) -> None:
@@ -931,11 +885,5 @@ async def test_config_entry_setup_registers_real_platform_entities(hass) -> None
     ]
     assert enabled
     assert disabled
-    assert all(
-        hass.states.get(registry_entry.entity_id) is not None
-        for registry_entry in enabled
-    )
-    assert all(
-        hass.states.get(registry_entry.entity_id) is None
-        for registry_entry in disabled
-    )
+    assert all(hass.states.get(registry_entry.entity_id) is not None for registry_entry in enabled)
+    assert all(hass.states.get(registry_entry.entity_id) is None for registry_entry in disabled)

@@ -17,7 +17,6 @@ from custom_components.solplanet.const import (
     METER_IDENTIFIER,
 )
 from custom_components.solplanet.entity import SolplanetEntity, get_entity_unique_id
-
 from tests.helpers import FakeCoordinator
 
 COMPONENT_DIR = Path(__file__).parents[1] / "custom_components" / "solplanet"
@@ -172,9 +171,7 @@ def test_categories_and_default_enablement_follow_entity_policy() -> None:
             assert description.entity_category is EntityCategory.CONFIG
             assert description.entity_registry_enabled_default
 
-    by_key = {
-        description.translation_key: description for description in catalog["sensor"]
-    }
+    by_key = {description.translation_key: description for description in catalog["sensor"]}
     disabled_measurements = {
         "frequency",
         "apparent_power",
@@ -277,11 +274,7 @@ def test_translation_metadata_does_not_change_unique_ids() -> None:
         }
         assert len(unique_ids) == len(descriptions), domain
 
-    inverter_power = next(
-        item for item in _catalog()["sensor"] if item.key == "inv-1_pac"
-    )
-    battery_soc = next(
-        item for item in _catalog()["sensor"] if item.key == "bat-1_soc"
-    )
+    inverter_power = next(item for item in _catalog()["sensor"] if item.key == "inv-1_pac")
+    battery_soc = next(item for item in _catalog()["sensor"] if item.key == "bat-1_soc")
     assert get_entity_unique_id(inverter_power, "inv-1") == "solplanet_inv-1_pac"
     assert get_entity_unique_id(battery_soc, "bat-1") == "solplanet_battery_bat-1_soc"

@@ -53,17 +53,13 @@ def test_read_frame_generation(
 
 def test_write_single_frame_encodes_value(generator: ModbusRtuFrameGenerator) -> None:
     """Single-register writes encode signed values before framing."""
-    frame = bytes.fromhex(
-        generator.generate_write_single_holding_register_frame(3, 40201, -2, DataType.S16)
-    )
+    frame = bytes.fromhex(generator.generate_write_single_holding_register_frame(3, 40201, -2, DataType.S16))
     assert struct.unpack(">B B H H", frame[:6]) == (3, 0x06, 200, 0xFFFE)
 
 
 def test_write_multiple_frame(generator: ModbusRtuFrameGenerator) -> None:
     """Multiple-register writes include count, byte count, values, and CRC."""
-    frame = bytes.fromhex(
-        generator.generate_write_multiple_holding_registers_frame(3, 40201, [1, 0xFFFF])
-    )
+    frame = bytes.fromhex(generator.generate_write_multiple_holding_registers_frame(3, 40201, [1, 0xFFFF]))
     assert struct.unpack(">B B H H B H H", frame[:-2]) == (
         3,
         0x10,
@@ -160,9 +156,7 @@ def test_decode_register_types(
         DataType.STRING,
     ],
 )
-def test_decode_nan_sentinels(
-    generator: ModbusRtuFrameGenerator, data_type: DataType
-) -> None:
+def test_decode_nan_sentinels(generator: ModbusRtuFrameGenerator, data_type: DataType) -> None:
     """Protocol NaN sentinels become ``None``."""
     raw = generator.NAN_VALUES[data_type]
     values = [raw >> 16, raw & 0xFFFF] if raw > 0xFFFF else [raw]
@@ -176,9 +170,7 @@ def test_decode_u16_block(generator: ModbusRtuFrameGenerator) -> None:
 
 
 @pytest.mark.parametrize("data_type", [DataType.B32, DataType.S32, DataType.U32])
-def test_decode_rejects_short_32_bit_values(
-    generator: ModbusRtuFrameGenerator, data_type: DataType
-) -> None:
+def test_decode_rejects_short_32_bit_values(generator: ModbusRtuFrameGenerator, data_type: DataType) -> None:
     """A 32-bit value requires two registers."""
     with pytest.raises(ValueError, match="Insufficient data"):
         generator.decode_response(_read_response(generator, [1]), data_type)
@@ -210,9 +202,7 @@ def test_decode_write_acknowledgements(generator: ModbusRtuFrameGenerator) -> No
 
 
 @pytest.mark.parametrize("function", [0x83, 0x84, 0x86, 0x90])
-def test_decode_modbus_error(
-    generator: ModbusRtuFrameGenerator, function: int
-) -> None:
+def test_decode_modbus_error(generator: ModbusRtuFrameGenerator, function: int) -> None:
     """All supported Modbus exception function codes are decoded."""
     response = _with_crc(generator, bytes((3, function, 2)))
     assert generator.decode_response(response, DataType.U16) == {
@@ -319,6 +309,7 @@ def test_encode_rejects_invalid_values(
 
 def test_unsupported_data_type_paths(generator: ModbusRtuFrameGenerator) -> None:
     """Unknown enum-like values cannot be decoded or encoded."""
+
     class Unknown:
         value = "unknown"
 

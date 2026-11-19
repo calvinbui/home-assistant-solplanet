@@ -3,8 +3,7 @@
 import contextlib
 import enum
 import struct
-from typing import cast
-
+from typing import ClassVar, cast
 
 type ModbusResponse = dict[str, int] | int | str | list[int | None] | None
 type ModbusRequestValue = int | str | None
@@ -27,7 +26,7 @@ class ModbusRtuFrameGenerator:
     """A class to generate and decode Modbus RTU frames for various Modbus functions."""
 
     # Definition of NaN values for different data types as class attribute
-    NAN_VALUES: dict[DataType, int] = {
+    NAN_VALUES: ClassVar[dict[DataType, int]] = {
         DataType.B16: 0xFFFF,
         DataType.B32: 0xFFFFFFFF,
         DataType.S16: 0x8000,
@@ -39,7 +38,7 @@ class ModbusRtuFrameGenerator:
     }
 
     # Value ranges for validation
-    VALUE_RANGES: dict[DataType, tuple[int, int]] = {
+    VALUE_RANGES: ClassVar[dict[DataType, tuple[int, int]]] = {
         DataType.B16: (0, 0xFFFF),
         DataType.U16: (0, 0xFFFF),
         DataType.E16: (0, 0xFFFF),
@@ -120,16 +119,14 @@ class ModbusRtuFrameGenerator:
 
         return frame.hex()
 
-    def decode_response(
-        self, response_hex: str, data_type: DataType
-    ) -> ModbusResponse:
+    def decode_response(self, response_hex: str, data_type: DataType) -> ModbusResponse:
         """Decode Modbus RTU response based on function code and data type."""
         response = bytes.fromhex(response_hex)
 
         if len(response) < 5:
             raise ValueError("Invalid response length.")
 
-        device_id, function_code = struct.unpack(">B B", response[:2])
+        _device_id, function_code = struct.unpack(">B B", response[:2])
 
         # Use a more concise approach to function code routing
         if function_code in (0x03, 0x04):
@@ -171,7 +168,6 @@ class ModbusRtuFrameGenerator:
         self, response: bytes, data_type: DataType
     ) -> int | str | list[int | None] | None:
         """Decode Modbus RTU response for Read Holding Register and Read Input Register functions."""
-        device_id, function_code, byte_count = struct.unpack(">B B B", response[:3])
         data = response[3:-2]
 
         self._verify_crc(response)

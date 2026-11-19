@@ -24,7 +24,7 @@ class SolplanetEntityDescription(EntityDescription):
     data_field_device_type: str
     data_field_path: list[str | int]
     data_field_data_type: str
-    data_field_NaN_value: int | None = None  # noqa: N815
+    data_field_NaN_value: int | None = None
     data_field_value_multiply: float | None = None
     data_field_value_mapper: abc.Callable[[Any], Any] | None = None
     unique_id_suffix: str | None = None
