@@ -13,8 +13,6 @@ You do not need your inverter serial number, a Solplanet cloud account, or insta
 
 ## Install With Marketplace (Home Assistant 2026.11 and newer)
 
-These Marketplace instructions have not yet been verified on Home Assistant 2026.11.
-
 1. Open **Settings > Marketplace**.
 2. Select **Add from link** and add `https://github.com/calvinbui/home-assistant-solplanet`. Use this exact repository rather than another integration named **Solplanet**.
 3. Select **Install** and continue in the setup flow. A restart is not required for the first installation.
