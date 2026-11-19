@@ -112,7 +112,7 @@ def _host_is_ip_address(host: Any) -> bool:
     """Return whether a configured host is a literal IP address."""
     try:
         ip_address(host)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return False
     return True
 
@@ -128,17 +128,14 @@ class SolplanetConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def _entry_for_mac(self, mac: str) -> SolplanetConfigEntry | None:
         """Return the configured Solplanet entry linked to a network MAC."""
-        device_registry = dr.async_get(self.hass)
-        device = device_registry.async_get_device(connections={(dr.CONNECTION_NETWORK_MAC, mac)})
-        if device is None:
-            return None
+        devices = dr.async_get(self.hass).async_get_devices(connections={(dr.CONNECTION_NETWORK_MAC, mac)})
         return cast(
             SolplanetConfigEntry | None,
             next(
                 (
                     entry
-                    for entry_id in device.config_entries
-                    if (entry := self.hass.config_entries.async_get_entry(entry_id)) is not None
+                    for device in devices
+                    if (entry := self.hass.config_entries.async_get_entry(device.config_entry_id)) is not None
                     and entry.domain == DOMAIN
                 ),
                 None,

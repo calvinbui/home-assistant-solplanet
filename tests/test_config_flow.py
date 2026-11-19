@@ -370,6 +370,12 @@ async def test_dhcp_uses_registered_mac_to_upgrade_legacy_unique_id(hass) -> Non
     entry.add_to_hass(hass)
     discovery_info = _dhcp_info()
     normalized_mac = "c0:48:2f:20:00:01"
+    other_entry = MockConfigEntry(domain="other")
+    other_entry.add_to_hass(hass)
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=other_entry.entry_id,
+        connections={(dr.CONNECTION_NETWORK_MAC, normalized_mac)},
+    )
     dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
         connections={(dr.CONNECTION_NETWORK_MAC, normalized_mac)},
@@ -405,6 +411,38 @@ async def test_dhcp_uses_registered_mac_to_upgrade_legacy_unique_id(hass) -> Non
         CONF_INTERVAL: 90,
         CONF_MAC: normalized_mac,
     }
+
+
+async def test_dhcp_ignores_mac_registered_by_another_integration(hass) -> None:
+    """A MAC that only another integration registered does not link an entry."""
+    other_entry = MockConfigEntry(domain="other")
+    other_entry.add_to_hass(hass)
+    discovery_info = _dhcp_info()
+    normalized_mac = "c0:48:2f:20:00:01"
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=other_entry.entry_id,
+        connections={(dr.CONNECTION_NETWORK_MAC, normalized_mac)},
+    )
+
+    with patch(
+        "custom_components.solplanet.config_flow.validate_input",
+        AsyncMock(
+            return_value={
+                "title": discovery_info.ip,
+                "unique_id": "PSN-1",
+                "mac_addresses": set(),
+                "inverter_count": 1,
+            }
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_DHCP},
+            data=discovery_info,
+        )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "dhcp_confirm"
 
 
 @pytest.mark.parametrize(
