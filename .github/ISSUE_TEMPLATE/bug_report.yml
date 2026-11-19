@@ -32,6 +32,7 @@ body:
       label: Installation method
       options:
         - HACS
+        - Marketplace
         - Manual
         - Other (please describe below)
     validations:
@@ -41,7 +42,7 @@ body:
     id: integration_version
     attributes:
       label: Integration version
-      description: Version shown in HACS, or the tag/commit you installed
+      description: Version shown in HACS/Marketplace, or the tag/commit you installed
       placeholder: "1.0.0"
     validations:
       required: true
