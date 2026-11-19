@@ -23,5 +23,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/calvinbui/home-assistant-solplanet/issues",
   "requirements": [],
-  "version": "1.2.0"
+  "version": "2.0.0"
 }
