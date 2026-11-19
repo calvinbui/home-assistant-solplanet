@@ -191,8 +191,8 @@ def test_register_devices_labels_indexed_sub_meter() -> None:
     assert calls[1]["identifiers"] == {(DOMAIN, "meter_INV_sub1")}
 
 
-def test_register_devices_detaches_only_authoritatively_stale_devices() -> None:
-    """A complete inventory detaches stale devices without deleting shared entries."""
+def test_register_devices_removes_only_authoritatively_stale_devices() -> None:
+    """A complete inventory removes stale devices and leaves other entries alone."""
     inverter_info = SimpleNamespace(
         isn="INV-1",
         model="ASW5000",
@@ -227,13 +227,13 @@ def test_register_devices_detaches_only_authoritatively_stale_devices() -> None:
 
     integration._register_devices(registry, entry)
 
-    assert registry.async_update_device.call_args_list == [
-        call(device_id="stale-inverter", remove_config_entry_id="entry-id"),
-        call(device_id="stale-battery", remove_config_entry_id="entry-id"),
-        call(device_id="stale-dongle", remove_config_entry_id="entry-id"),
-        call(device_id="stale-meter", remove_config_entry_id="entry-id"),
+    assert registry.async_remove_device.call_args_list == [
+        call("stale-inverter"),
+        call("stale-battery"),
+        call("stale-dongle"),
+        call("stale-meter"),
     ]
-    registry.async_remove_device.assert_not_called()
+    registry.async_update_device.assert_not_called()
     registry.entries_for_config_entry.assert_called_once_with("entry-id")
 
 
@@ -270,10 +270,7 @@ def test_register_devices_preserves_uncertain_dongle_and_meter_entries() -> None
     assert registry.async_get_or_create.call_args.kwargs["connections"] == {
         (dr.CONNECTION_NETWORK_MAC, "aa:bb:cc:dd:ee:ff")
     }
-    registry.async_update_device.assert_called_once_with(
-        device_id="stale-battery",
-        remove_config_entry_id="entry-id",
-    )
+    registry.async_remove_device.assert_called_once_with("stale-battery")
 
 
 @pytest.mark.asyncio
