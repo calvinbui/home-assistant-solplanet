@@ -672,7 +672,7 @@ class SolplanetMetadataUpdateCoordinator(SolplanetDataUpdateCoordinator):
         previous = self.runtime.data[DONGLE_IDENTIFIER]
         try:
             dongle_info = await self.api.client.get("getdev.cgi")
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.debug("Failed fetching dongle metadata: %s", err, exc_info=True)
             return
         if not isinstance(dongle_info, dict):
@@ -686,7 +686,7 @@ class SolplanetMetadataUpdateCoordinator(SolplanetDataUpdateCoordinator):
 
         try:
             network_info = await self.api.client.get("wlanget.cgi?info=2")
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.debug("Failed fetching dongle network info: %s", err, exc_info=True)
             network_info = previous_entry.get("network")
 
@@ -714,7 +714,7 @@ class SolplanetMetadataUpdateCoordinator(SolplanetDataUpdateCoordinator):
                 power_register = power_register[0] if power_register else None
             if isinstance(power_register, int):
                 power_on = power_register == 1
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.debug("Failed reading inverter power setting: %s", err, exc_info=True)
 
         updated: dict[str, dict[str, Any]] = {}
@@ -747,7 +747,7 @@ class SolplanetMetadataUpdateCoordinator(SolplanetDataUpdateCoordinator):
         schedule: dict[str, Any] | None = None
         try:
             schedule = await self.api.get_schedule()
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.debug("Failed fetching battery schedule: %s", err, exc_info=True)
 
         more_settings: dict[str, Any] | None = None
@@ -765,7 +765,7 @@ class SolplanetMetadataUpdateCoordinator(SolplanetDataUpdateCoordinator):
                     "led_color_index": int(registers[2] or 0),
                     "led_brightness": int(registers[3] or 0),
                 }
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.debug("Failed reading battery settings: %s", err, exc_info=True)
 
         updated: dict[str, dict[str, Any]] = {}
@@ -777,7 +777,7 @@ class SolplanetMetadataUpdateCoordinator(SolplanetDataUpdateCoordinator):
             info: GetBatteryInfoResponse | None
             try:
                 info = await self.api.get_battery_info(battery_id)
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _LOGGER.debug(
                     "Failed fetching battery metadata for %s: %s",
                     battery_id,
@@ -830,7 +830,7 @@ class SolplanetMetadataUpdateCoordinator(SolplanetDataUpdateCoordinator):
                 "getting.cgi",
                 {"cmd": "get_app_dev_info_req", "payload": {"type": [4]}},
             )
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.debug("App meter inventory is unavailable: %s", err, exc_info=True)
             return None
 
@@ -860,7 +860,7 @@ class SolplanetMetadataUpdateCoordinator(SolplanetDataUpdateCoordinator):
             response = await self.api.client.post("getting.cgi", {"cmd": "get_meter_req"})
             if isinstance(response, dict) and response.get("status") == 200:
                 updated[target_id]["meter_req"] = response.get("payload") or {}
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.debug("Failed fetching meter configuration: %s", err, exc_info=True)
 
         return updated
@@ -874,7 +874,7 @@ class SolplanetMetadataUpdateCoordinator(SolplanetDataUpdateCoordinator):
         fallback_id = next((info.isn for info in inverter_info if info.isn), None)
         try:
             info = await self.api.get_meter_info()
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.debug("Failed fetching legacy meter metadata: %s", err, exc_info=True)
             return
 
@@ -912,9 +912,7 @@ class SolplanetMetadataUpdateCoordinator(SolplanetDataUpdateCoordinator):
         entry = dict(previous_entry or {})
         entry["info"] = info
         model_code = (
-            getattr(info, "sec_mod", None)
-            if submeter_index is not None
-            else getattr(info, "mod", None)
+            getattr(info, "sec_mod", None) if submeter_index is not None else getattr(info, "mod", None)
         )
         if isinstance(model_code, int):
             entry["model_name"] = METER_MODEL_NAMES.get(model_code, "")
@@ -924,7 +922,7 @@ class SolplanetMetadataUpdateCoordinator(SolplanetDataUpdateCoordinator):
         if previous_entry is None:
             try:
                 data = await self.api.get_meter_data(submeter=submeter_index)
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _LOGGER.debug(
                     "Failed probing legacy meter data for %s: %s",
                     meter_id,
@@ -984,7 +982,7 @@ class SolplanetInverterUpdateCoordinator(SolplanetDataUpdateCoordinator):
                 ):
                     data = await self._async_add_grid_status(data, entry.get("info"))
                 entry["data"] = data
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 failed_device_ids.add(inverter_id)
                 last_error = err
                 _LOGGER.debug(
@@ -1060,9 +1058,7 @@ class SolplanetBatteryUpdateCoordinator(SolplanetDataUpdateCoordinator):
             update_interval=update_interval,
         )
         self._zero_filled_update_count = 0
-        self._battery_energy_regression_candidates: dict[
-            str, dict[str, tuple[float | int, int]]
-        ] = {}
+        self._battery_energy_regression_candidates: dict[str, dict[str, tuple[float | int, int]]] = {}
 
     @override
     async def _async_update_runtime_data(self) -> None:
@@ -1083,9 +1079,7 @@ class SolplanetBatteryUpdateCoordinator(SolplanetDataUpdateCoordinator):
                         battery_id,
                     )
                     continue
-                candidates = self._battery_energy_regression_candidates.setdefault(
-                    battery_id, {}
-                )
+                candidates = self._battery_energy_regression_candidates.setdefault(battery_id, {})
                 retained_fields, confirmed_fields = retain_previous_battery_energy_values(
                     data, entry.get("data"), candidates
                 )
@@ -1104,7 +1098,7 @@ class SolplanetBatteryUpdateCoordinator(SolplanetDataUpdateCoordinator):
                         ", ".join(confirmed_fields),
                     )
                 entry["data"] = data
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 failed_device_ids.add(battery_id)
                 last_error = err
                 _LOGGER.debug(
@@ -1180,7 +1174,7 @@ class SolplanetMeterUpdateCoordinator(SolplanetDataUpdateCoordinator):
                 data = await self.api.get_meter_data(submeter=entry.get("submeter_index"))
                 if self.api.version == "v2" and not _legacy_meter_payload_looks_valid(data):
                     raise RuntimeError("legacy meter returned an empty or zero-filled payload")
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 failed_device_ids.add(meter_id)
                 last_error = err
                 _LOGGER.debug("Failed fetching meter data for %s: %s", meter_id, err, exc_info=True)

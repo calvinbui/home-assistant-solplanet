@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ipaddress import ip_address
 import logging
+from ipaddress import ip_address
 from typing import Any, cast, override
 
 import probatio
@@ -89,7 +89,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
                 if mac_address is not None
             }
             # Do not override the title with dongle metadata; keep the user-provided host.
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.debug("Failed to read dongle identity: %s", err, exc_info=True)
 
     # Fallback: inverter serial
@@ -129,9 +129,7 @@ class SolplanetConfigFlow(ConfigFlow, domain=DOMAIN):
     def _entry_for_mac(self, mac: str) -> SolplanetConfigEntry | None:
         """Return the configured Solplanet entry linked to a network MAC."""
         device_registry = dr.async_get(self.hass)
-        device = device_registry.async_get_device(
-            connections={(dr.CONNECTION_NETWORK_MAC, mac)}
-        )
+        device = device_registry.async_get_device(connections={(dr.CONNECTION_NETWORK_MAC, mac)})
         if device is None:
             return None
         return cast(
@@ -140,8 +138,7 @@ class SolplanetConfigFlow(ConfigFlow, domain=DOMAIN):
                 (
                     entry
                     for entry_id in device.config_entries
-                    if (entry := self.hass.config_entries.async_get_entry(entry_id))
-                    is not None
+                    if (entry := self.hass.config_entries.async_get_entry(entry_id)) is not None
                     and entry.domain == DOMAIN
                 ),
                 None,
@@ -156,9 +153,7 @@ class SolplanetConfigFlow(ConfigFlow, domain=DOMAIN):
         }
         return any(
             not expected_identifiers.isdisjoint(device.identifiers)
-            for device in dr.async_entries_for_config_entry(
-                dr.async_get(self.hass), entry.entry_id
-            )
+            for device in dr.async_entries_for_config_entry(dr.async_get(self.hass), entry.entry_id)
         )
 
     @staticmethod
@@ -169,9 +164,7 @@ class SolplanetConfigFlow(ConfigFlow, domain=DOMAIN):
         """Get the options flow for this handler."""
         return SolplanetOptionsFlow(config_entry)
 
-    async def async_step_reconfigure(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Handle reconfiguration of the integration."""
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
@@ -198,9 +191,7 @@ class SolplanetConfigFlow(ConfigFlow, domain=DOMAIN):
                     if not legacy_identity_matches:
                         self._abort_if_unique_id_mismatch()
                     updated_title = (
-                        user_input[CONF_HOST]
-                        if entry.title == entry.data[CONF_HOST]
-                        else entry.title
+                        user_input[CONF_HOST] if entry.title == entry.data[CONF_HOST] else entry.title
                     )
                     return self.async_update_reload_and_abort(
                         entry,
@@ -242,10 +233,7 @@ class SolplanetConfigFlow(ConfigFlow, domain=DOMAIN):
             not isinstance(unique_id, str)
             or not unique_id.strip()
             or not info["inverter_count"]
-            or (
-                info["mac_addresses"]
-                and mac not in info["mac_addresses"]
-            )
+            or (info["mac_addresses"] and mac not in info["mac_addresses"])
         ):
             return self.async_abort(reason="cannot_connect")
 

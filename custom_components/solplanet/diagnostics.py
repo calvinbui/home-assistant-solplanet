@@ -110,17 +110,12 @@ def _meter_diagnostics(device_data: dict[str, Any]) -> dict[str, Any]:
         "manufacturer": _field(info, "manufactory"),
         "model": _field(info, "name") or _field(info, "equipModel"),
         "meter_type": _field(info, "type"),
-        "data_available": any(
-            device_data.get(data_type) is not None
-            for data_type in ("data", "app_data")
-        ),
+        "data_available": any(device_data.get(data_type) is not None for data_type in ("data", "app_data")),
         "settings_available": bool(device_data.get("meter_req")),
     }
 
 
-DEVICE_DIAGNOSTICS: dict[
-    str, Callable[[dict[str, Any]], dict[str, Any]]
-] = {
+DEVICE_DIAGNOSTICS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     DONGLE_IDENTIFIER: _dongle_diagnostics,
     INVERTER_IDENTIFIER: _inverter_diagnostics,
     BATTERY_IDENTIFIER: _battery_diagnostics,
@@ -139,9 +134,7 @@ def _coordinator_status(
     return {
         "initialized": True,
         "last_update_success": coordinator.last_update_success,
-        "update_interval_seconds": (
-            update_interval.total_seconds() if update_interval is not None else None
-        ),
+        "update_interval_seconds": (update_interval.total_seconds() if update_interval is not None else None),
         "failed_device_count": len(coordinator.failed_device_ids),
     }
 
@@ -168,16 +161,12 @@ async def async_get_config_entry_diagnostics(
             ),
         },
         "protocol_version": runtime.api.version,
-        "supported_device_types": list(
-            PROTOCOL_DEVICE_TYPES.get(runtime.api.version, DEVICE_TYPES)
-        ),
+        "supported_device_types": list(PROTOCOL_DEVICE_TYPES.get(runtime.api.version, DEVICE_TYPES)),
         "device_counts": {
-            device_type: len(runtime.data.get(device_type, {}))
-            for device_type in DEVICE_TYPES
+            device_type: len(runtime.data.get(device_type, {})) for device_type in DEVICE_TYPES
         },
         "coordinators": {
-            name: _coordinator_status(getattr(runtime, attribute))
-            for name, attribute in COORDINATORS.items()
+            name: _coordinator_status(getattr(runtime, attribute)) for name, attribute in COORDINATORS.items()
         },
         "devices": {
             device_type: [

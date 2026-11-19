@@ -103,9 +103,7 @@ def _adapter(version: str) -> tuple[SolplanetApiAdapter, SimpleNamespace]:
     ],
 )
 @pytest.mark.parametrize("version", ["v1", "v2"])
-async def test_common_operations_delegate(
-    version: str, method: str, args: tuple[object, ...]
-) -> None:
+async def test_common_operations_delegate(version: str, method: str, args: tuple[object, ...]) -> None:
     """Operations common to both protocols transparently return API results."""
     adapter, api = _adapter(version)
     mock = AsyncMock(return_value={"result": method})
@@ -143,9 +141,7 @@ async def test_indexed_meter_reads_delegate_only_to_v2() -> None:
         ("set_schedule_slots", ({"Mon": [1]},)),
     ],
 )
-async def test_v2_battery_operations_delegate(
-    method: str, args: tuple[object, ...]
-) -> None:
+async def test_v2_battery_operations_delegate(method: str, args: tuple[object, ...]) -> None:
     """Every V2-only operation is delegated with its original arguments."""
     adapter, api = _adapter("v2")
     result = {"result": method}
@@ -173,9 +169,7 @@ async def test_v2_battery_operations_delegate(
         ("set_schedule_slots", ({"Mon": [1]},)),
     ],
 )
-async def test_v1_rejects_battery_operations(
-    method: str, args: tuple[object, ...]
-) -> None:
+async def test_v1_rejects_battery_operations(method: str, args: tuple[object, ...]) -> None:
     """V1 consistently rejects operations its firmware cannot provide."""
     adapter, _ = _adapter("v1")
     with pytest.raises(NotImplementedError, match="not supported in V1"):
@@ -190,9 +184,7 @@ async def test_v1_rejects_battery_operations(
         ("modbus_read_input_registers", (DataType.U32, 3, 30001, 2)),
     ],
 )
-async def test_modbus_positional_delegation(
-    method: str, args: tuple[object, ...]
-) -> None:
+async def test_modbus_positional_delegation(method: str, args: tuple[object, ...]) -> None:
     """Modbus read and single-write calls preserve positional parameters."""
     adapter, api = _adapter("v2")
     mock = AsyncMock(return_value=123)

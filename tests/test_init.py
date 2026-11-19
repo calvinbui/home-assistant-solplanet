@@ -205,9 +205,7 @@ def test_register_devices_detaches_only_authoritatively_stale_devices() -> None:
             DONGLE_IDENTIFIER: {"DG-1": {"data": {}}},
             INVERTER_IDENTIFIER: {"INV-1": {"info": inverter_info}},
             BATTERY_IDENTIFIER: {},
-            METER_IDENTIFIER: {
-                "METER-1": {"app_info": {"sn": "METER-1", "equipModel": "1"}}
-            },
+            METER_IDENTIFIER: {"METER-1": {"app_info": {"sn": "METER-1", "equipModel": "1"}}},
         }
     )
     entry = SimpleNamespace(entry_id="entry-id", runtime_data=runtime)
@@ -446,9 +444,9 @@ async def test_setup_entry_translates_detection_failure() -> None:
             "create",
             AsyncMock(side_effect=RuntimeError("not ready")),
         ),
+        pytest.raises(ConfigEntryNotReady) as exc_info,
     ):
-        with pytest.raises(ConfigEntryNotReady) as exc_info:
-            await integration.async_setup_entry(hass, entry)
+        await integration.async_setup_entry(hass, entry)
     assert exc_info.value.translation_domain == DOMAIN
     assert exc_info.value.translation_key == "protocol_detection_failed"
     assert exc_info.value.translation_placeholders == {"error": "not ready"}

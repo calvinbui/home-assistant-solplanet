@@ -5,8 +5,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-import pytest
 import probatio
+import pytest
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.solplanet import services
@@ -14,9 +14,7 @@ from custom_components.solplanet.client import BatterySchedule, ScheduleSlot
 from custom_components.solplanet.const import (
     BATTERY_IDENTIFIER,
     DOMAIN,
-    METER_IDENTIFIER,
 )
-
 from tests.helpers import FakeCoordinator
 
 
@@ -55,12 +53,8 @@ def _assert_translated_exception(
 def test_build_target_extracts_only_supported_target_fields() -> None:
     """Merged service target fields are copied from call data."""
     assert services._build_target(_call(value=1)) == {}
-    assert services._build_target(_call(entity_id="sensor.one", value=1)) == {
-        "entity_id": "sensor.one"
-    }
-    assert services._build_target(
-        _call(device_id=["one"], entity_id=["sensor.one"])
-    ) == {
+    assert services._build_target(_call(entity_id="sensor.one", value=1)) == {"entity_id": "sensor.one"}
+    assert services._build_target(_call(device_id=["one"], entity_id=["sensor.one"])) == {
         "entity_id": ["sensor.one"],
         "device_id": ["one"],
     }
@@ -73,18 +67,14 @@ async def test_battery_target_resolution_handles_entity_and_device_lists() -> No
         "battery2": _device(("other", "battery_WRONG"), (DOMAIN, "battery_BAT-2")),
         "meter": _device((DOMAIN, "meter_METER-1")),
     }
-    device_registry = SimpleNamespace(
-        async_get=lambda device_id: devices.get(device_id)
-    )
+    device_registry = SimpleNamespace(async_get=lambda device_id: devices.get(device_id))
     entities = {
         "sensor.battery": SimpleNamespace(device_id="battery"),
         "sensor.meter": SimpleNamespace(device_id="meter"),
         "sensor.no_device": SimpleNamespace(device_id=None),
         "sensor.missing_device": SimpleNamespace(device_id="missing"),
     }
-    entity_registry = SimpleNamespace(
-        async_get=lambda entity_id: entities.get(entity_id)
-    )
+    entity_registry = SimpleNamespace(async_get=lambda entity_id: entities.get(entity_id))
     with (
         patch.object(services.dr, "async_get", return_value=device_registry),
         patch.object(services.er, "async_get", return_value=entity_registry),
@@ -105,12 +95,8 @@ async def test_battery_target_resolution_handles_entity_and_device_lists() -> No
         single = await services.get_isn_from_target(
             SimpleNamespace(), {"entity_id": "sensor.battery", "device_id": "battery"}
         )
-        entity_only = await services.get_isn_from_target(
-            SimpleNamespace(), {"entity_id": "sensor.battery"}
-        )
-        device_only = await services.get_isn_from_target(
-            SimpleNamespace(), {"device_id": "battery2"}
-        )
+        entity_only = await services.get_isn_from_target(SimpleNamespace(), {"entity_id": "sensor.battery"})
+        device_only = await services.get_isn_from_target(SimpleNamespace(), {"device_id": "battery2"})
     assert set(result) == {"BAT-1", "BAT-2"}
     assert single == ["BAT-1"]
     assert entity_only == ["BAT-1"]
@@ -124,18 +110,14 @@ async def test_meter_target_resolution_handles_entity_and_device_lists() -> None
         "meter2": _device((DOMAIN, "meter_METER-2")),
         "battery": _device((DOMAIN, "battery_BAT-1")),
     }
-    device_registry = SimpleNamespace(
-        async_get=lambda device_id: devices.get(device_id)
-    )
+    device_registry = SimpleNamespace(async_get=lambda device_id: devices.get(device_id))
     entities = {
         "sensor.meter": SimpleNamespace(device_id="meter"),
         "sensor.battery": SimpleNamespace(device_id="battery"),
         "sensor.no_device": SimpleNamespace(device_id=None),
         "sensor.missing": SimpleNamespace(device_id="missing"),
     }
-    entity_registry = SimpleNamespace(
-        async_get=lambda entity_id: entities.get(entity_id)
-    )
+    entity_registry = SimpleNamespace(async_get=lambda entity_id: entities.get(entity_id))
     with (
         patch.object(services.dr, "async_get", return_value=device_registry),
         patch.object(services.er, "async_get", return_value=entity_registry),
@@ -159,9 +141,7 @@ async def test_meter_target_resolution_handles_entity_and_device_lists() -> None
         entity_only = await services.get_meter_isn_from_target(
             SimpleNamespace(), {"entity_id": "sensor.meter"}
         )
-        device_only = await services.get_meter_isn_from_target(
-            SimpleNamespace(), {"device_id": "meter2"}
-        )
+        device_only = await services.get_meter_isn_from_target(SimpleNamespace(), {"device_id": "meter2"})
     assert set(result) == {"METER-1", "METER-2"}
     assert single == ["METER-1"]
     assert entity_only == ["METER-1"]
@@ -369,25 +349,25 @@ async def test_set_schedule_slots_updates_copy_and_validates_failures() -> None:
     _hass, registry, coordinator = await _setup_services()
     handler = registry.handlers["set_schedule_slots"]
 
-    with patch.object(services, "get_isn_from_target", AsyncMock(return_value=[])):
-        with pytest.raises(ServiceValidationError) as exc_info:
-            await handler(_schedule_call())
+    with (
+        patch.object(services, "get_isn_from_target", AsyncMock(return_value=[])),
+        pytest.raises(ServiceValidationError) as exc_info,
+    ):
+        await handler(_schedule_call())
     _assert_translated_exception(exc_info.value, "no_valid_battery_targets")
 
-    with patch.object(
-        services, "get_isn_from_target", AsyncMock(return_value=["missing"])
+    with (
+        patch.object(services, "get_isn_from_target", AsyncMock(return_value=["missing"])),
+        pytest.raises(ServiceValidationError) as exc_info,
     ):
-        with pytest.raises(ServiceValidationError) as exc_info:
-            await handler(_schedule_call())
+        await handler(_schedule_call())
     _assert_translated_exception(
         exc_info.value,
         "battery_coordinator_not_found",
         {"identifiers": "missing"},
     )
 
-    with patch.object(
-        services, "get_isn_from_target", AsyncMock(return_value=["bat-1"])
-    ):
+    with patch.object(services, "get_isn_from_target", AsyncMock(return_value=["bat-1"])):
         await handler(_schedule_call())
     new_slots = coordinator.set_battery_schedule_slots.await_args.args[1]
     assert len(new_slots["Mon"]) == 2
@@ -395,9 +375,7 @@ async def test_set_schedule_slots_updates_copy_and_validates_failures() -> None:
     original_slots = coordinator.data[BATTERY_IDENTIFIER]["bat-1"]["schedule"]["slots"]
     original_count = len(original_slots["Mon"])
     with (
-        patch.object(
-            services, "get_isn_from_target", AsyncMock(return_value=["bat-1"])
-        ),
+        patch.object(services, "get_isn_from_target", AsyncMock(return_value=["bat-1"])),
         pytest.raises(ServiceValidationError) as exc_info,
     ):
         await handler(_schedule_call(start_hour=1))
@@ -412,9 +390,7 @@ async def test_set_schedule_slots_updates_copy_and_validates_failures() -> None:
 
     original_slots["Mon"] = [ScheduleSlot(index, 0, 1, "charge") for index in range(6)]
     with (
-        patch.object(
-            services, "get_isn_from_target", AsyncMock(return_value=["bat-1"])
-        ),
+        patch.object(services, "get_isn_from_target", AsyncMock(return_value=["bat-1"])),
         pytest.raises(ServiceValidationError) as exc_info,
     ):
         await handler(_schedule_call(start_hour=12))
@@ -423,9 +399,7 @@ async def test_set_schedule_slots_updates_copy_and_validates_failures() -> None:
     coordinator.set_battery_schedule_slots.side_effect = ConnectionError("offline")
     original_slots["Mon"] = []
     with (
-        patch.object(
-            services, "get_isn_from_target", AsyncMock(return_value=["bat-1"])
-        ),
+        patch.object(services, "get_isn_from_target", AsyncMock(return_value=["bat-1"])),
         pytest.raises(HomeAssistantError) as exc_info,
     ):
         await handler(_schedule_call())
@@ -442,25 +416,25 @@ async def test_clear_schedule_handles_day_all_missing_and_unmatched_targets() ->
     _hass, registry, coordinator = await _setup_services()
     handler = registry.handlers["clear_schedule"]
 
-    with patch.object(services, "get_isn_from_target", AsyncMock(return_value=[])):
-        with pytest.raises(ServiceValidationError) as exc_info:
-            await handler(_call(day="Mon"))
+    with (
+        patch.object(services, "get_isn_from_target", AsyncMock(return_value=[])),
+        pytest.raises(ServiceValidationError) as exc_info,
+    ):
+        await handler(_call(day="Mon"))
     _assert_translated_exception(exc_info.value, "no_valid_battery_targets")
 
-    with patch.object(
-        services, "get_isn_from_target", AsyncMock(return_value=["missing"])
+    with (
+        patch.object(services, "get_isn_from_target", AsyncMock(return_value=["missing"])),
+        pytest.raises(ServiceValidationError) as exc_info,
     ):
-        with pytest.raises(ServiceValidationError) as exc_info:
-            await handler(_call(day="Mon"))
+        await handler(_call(day="Mon"))
     _assert_translated_exception(
         exc_info.value,
         "battery_coordinator_not_found",
         {"identifiers": "missing"},
     )
 
-    with patch.object(
-        services, "get_isn_from_target", AsyncMock(return_value=["bat-1"])
-    ):
+    with patch.object(services, "get_isn_from_target", AsyncMock(return_value=["bat-1"])):
         await handler(_call(day="Mon"))
         one_day = coordinator.set_battery_schedule_slots.await_args.args[1]
         assert one_day["Mon"] == []
@@ -487,9 +461,7 @@ async def test_meter_power_handler_builds_absolute_and_percent_payloads() -> Non
     """Power limiting builds the two vendor payload variants."""
     _hass, registry, coordinator = await _setup_services()
     handler = registry.handlers["set_meter_limit_power"]
-    with patch.object(
-        services, "get_meter_isn_from_target", AsyncMock(return_value=["meter-1"])
-    ):
+    with patch.object(services, "get_meter_isn_from_target", AsyncMock(return_value=["meter-1"])):
         await handler(_power_call())
         assert coordinator.set_meter_power_limit.await_args.args[0] == {
             "regulate": 10,
@@ -532,9 +504,7 @@ async def test_meter_power_rate_fallback_and_target_failures() -> None:
     handler = registry.handlers["set_meter_limit_power"]
     coordinator.get_max_inverter_rate_w = Mock(side_effect=RuntimeError("bad metadata"))
 
-    with patch.object(
-        services, "get_meter_isn_from_target", AsyncMock(return_value=["meter-1"])
-    ):
+    with patch.object(services, "get_meter_isn_from_target", AsyncMock(return_value=["meter-1"])):
         await handler(_power_call(target=9999, lostPowerMax=9999))
         with pytest.raises(ServiceValidationError) as exc_info:
             await handler(_power_call(target=10001, lostPowerMax=1))
@@ -544,17 +514,17 @@ async def test_meter_power_rate_fallback_and_target_failures() -> None:
             {"max_rate": "10000"},
         )
 
-    with patch.object(
-        services, "get_meter_isn_from_target", AsyncMock(return_value=[])
+    with (
+        patch.object(services, "get_meter_isn_from_target", AsyncMock(return_value=[])),
+        pytest.raises(ServiceValidationError) as exc_info,
     ):
-        with pytest.raises(ServiceValidationError) as exc_info:
-            await handler(_power_call())
+        await handler(_power_call())
     _assert_translated_exception(exc_info.value, "no_valid_meter_targets")
-    with patch.object(
-        services, "get_meter_isn_from_target", AsyncMock(return_value=["missing"])
+    with (
+        patch.object(services, "get_meter_isn_from_target", AsyncMock(return_value=["missing"])),
+        pytest.raises(ServiceValidationError) as exc_info,
     ):
-        with pytest.raises(ServiceValidationError) as exc_info:
-            await handler(_power_call())
+        await handler(_power_call())
     _assert_translated_exception(
         exc_info.value,
         "meter_coordinator_not_found",
@@ -569,21 +539,15 @@ async def test_meter_power_uses_default_rate_without_metadata_helper() -> None:
         set_meter_power_limit=AsyncMock(),
     )
     _hass, registry, coordinator = await _setup_services(coordinator)
-    with patch.object(
-        services, "get_meter_isn_from_target", AsyncMock(return_value=["meter-1"])
-    ):
-        await registry.handlers["set_meter_limit_power"](
-            _power_call(target=9000, lostPowerMax=9000)
-        )
+    with patch.object(services, "get_meter_isn_from_target", AsyncMock(return_value=["meter-1"])):
+        await registry.handlers["set_meter_limit_power"](_power_call(target=9000, lostPowerMax=9000))
     coordinator.set_meter_power_limit.assert_awaited_once()
 
 
 async def test_current_zero_and_disable_meter_handlers() -> None:
     """Current, zero-power and disable services validate and forward exact payloads."""
     _hass, registry, coordinator = await _setup_services()
-    resolve = patch.object(
-        services, "get_meter_isn_from_target", AsyncMock(return_value=["meter-1"])
-    )
+    resolve = patch.object(services, "get_meter_isn_from_target", AsyncMock(return_value=["meter-1"]))
     with resolve:
         current = registry.handlers["set_meter_limit_current"]
         with pytest.raises(ServiceValidationError) as exc_info:
@@ -623,27 +587,21 @@ async def test_current_zero_and_disable_meter_handlers() -> None:
             "currDiff": 1,
         }
 
-        await registry.handlers["set_meter_zero_power"](
-            _call(device_id="meter-device", lostTime="15")
-        )
+        await registry.handlers["set_meter_zero_power"](_call(device_id="meter-device", lostTime="15"))
         assert coordinator.set_meter_power_limit.await_args.args[0] == {
             "regulate": 10,
             "ctrlType": 2,
             "lostTime": 15,
         }
 
-        await registry.handlers["disable_meter_power_limit"](
-            _call(device_id="meter-device")
-        )
+        await registry.handlers["disable_meter_power_limit"](_call(device_id="meter-device"))
         assert coordinator.set_meter_power_limit.await_args.args[0] == {"regulate": 5}
 
 
 async def test_compatibility_meter_power_handler_builds_setmeter_payload() -> None:
     """The 404 compatibility action scales percentage and maps its two toggles."""
     _hass, registry, coordinator = await _setup_services()
-    with patch.object(
-        services, "get_meter_isn_from_target", AsyncMock(return_value=["meter-1"])
-    ):
+    with patch.object(services, "get_meter_isn_from_target", AsyncMock(return_value=["meter-1"])):
         await registry.handlers["set_compatibility_meter_power_limit"](
             _call(
                 device_id="meter-device",

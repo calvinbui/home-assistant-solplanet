@@ -91,7 +91,7 @@ class SolplanetApiAdapter:
                 await client.get(endpoint)
                 _LOGGER.debug("%s protocol detected successfully", version)
                 return version
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 _LOGGER.debug("%s protocol detection failed: %s", version, e)
 
         raise RuntimeError("Failed to detect any supported protocol version")

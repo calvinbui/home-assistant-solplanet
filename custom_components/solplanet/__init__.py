@@ -52,6 +52,7 @@ PLATFORMS: list[Platform] = [
 CONFIG_SCHEMA = cv.empty_config_schema(DOMAIN)
 _LOGGER = logging.getLogger(__name__)
 
+
 def _network_mac_connections(*mac_addresses: str | None) -> set[tuple[str, str]]:
     """Return normalized device-registry connections for available MAC addresses."""
     return {
@@ -68,20 +69,13 @@ def _current_device_identifiers(
     data = entry.runtime_data.data
     return {
         DONGLE_IDENTIFIER: {
-            (DOMAIN, f"{DONGLE_IDENTIFIER}_{dongle_id}")
-            for dongle_id in data[DONGLE_IDENTIFIER]
+            (DOMAIN, f"{DONGLE_IDENTIFIER}_{dongle_id}") for dongle_id in data[DONGLE_IDENTIFIER]
         },
-        INVERTER_IDENTIFIER: {
-            (DOMAIN, inverter_id) for inverter_id in data[INVERTER_IDENTIFIER]
-        },
+        INVERTER_IDENTIFIER: {(DOMAIN, inverter_id) for inverter_id in data[INVERTER_IDENTIFIER]},
         BATTERY_IDENTIFIER: {
-            (DOMAIN, f"{BATTERY_IDENTIFIER}_{battery_id}")
-            for battery_id in data[BATTERY_IDENTIFIER]
+            (DOMAIN, f"{BATTERY_IDENTIFIER}_{battery_id}") for battery_id in data[BATTERY_IDENTIFIER]
         },
-        METER_IDENTIFIER: {
-            (DOMAIN, f"{METER_IDENTIFIER}_{meter_id}")
-            for meter_id in data[METER_IDENTIFIER]
-        },
+        METER_IDENTIFIER: {(DOMAIN, f"{METER_IDENTIFIER}_{meter_id}") for meter_id in data[METER_IDENTIFIER]},
     }
 
 
@@ -116,9 +110,7 @@ def _remove_stale_devices(
 
     all_current_identifiers = set().union(*current_identifiers.values())
     for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id):
-        solplanet_identifiers = {
-            identifier for identifier in device.identifiers if identifier[0] == DOMAIN
-        }
+        solplanet_identifiers = {identifier for identifier in device.identifiers if identifier[0] == DOMAIN}
         if not solplanet_identifiers:
             continue
         if any(
@@ -170,9 +162,7 @@ def _register_devices(
     for inverter_id, inverter_entry in data[INVERTER_IDENTIFIER].items():
         inverter_info = inverter_entry["info"]
         connections = _network_mac_connections(
-            configured_mac
-            if first_dongle_id is None and inverter_id == first_inverter_id
-            else None
+            configured_mac if first_dongle_id is None and inverter_id == first_inverter_id else None
         )
         device_registry.async_get_or_create(
             config_entry_id=entry.entry_id,
@@ -270,12 +260,8 @@ async def async_remove_config_entry_device(
 ) -> bool:
     """Allow manual removal only when a device is absent from the inventory."""
     current_identifiers = set().union(*_current_device_identifiers(entry).values())
-    solplanet_identifiers = {
-        identifier for identifier in device.identifiers if identifier[0] == DOMAIN
-    }
-    return bool(solplanet_identifiers) and solplanet_identifiers.isdisjoint(
-        current_identifiers
-    )
+    solplanet_identifiers = {identifier for identifier in device.identifiers if identifier[0] == DOMAIN}
+    return bool(solplanet_identifiers) and solplanet_identifiers.isdisjoint(current_identifiers)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -378,9 +364,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: SolplanetConfigEntry) -
     return unload_ok
 
 
-async def async_migrate_entry(
-    hass: HomeAssistant, config_entry: SolplanetConfigEntry
-) -> bool:
+async def async_migrate_entry(hass: HomeAssistant, config_entry: SolplanetConfigEntry) -> bool:
     """Migrate old entry."""
     _LOGGER.debug(
         "Migrating configuration from version %s.%s",

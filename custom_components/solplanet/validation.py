@@ -6,7 +6,6 @@ import re
 
 from homeassistant.helpers.device_registry import format_mac
 
-
 _BATTERY_ZERO_STUB_FIELDS = (
     "cst",
     "bst",
@@ -62,9 +61,7 @@ def retain_previous_battery_energy_values(
     for field in _BATTERY_DAILY_ENERGY_FIELDS:
         previous_value = getattr(previous_data, field, None)
         current_value = getattr(data, field, None)
-        if not isinstance(previous_value, (int, float)) or not isinstance(
-            current_value, (int, float)
-        ):
+        if not isinstance(previous_value, (int, float)) or not isinstance(current_value, (int, float)):
             candidates.pop(field, None)
             continue
         if current_value >= previous_value:

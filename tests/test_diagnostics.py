@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 import json
+from datetime import timedelta
 from types import SimpleNamespace
 
 from homeassistant.components.diagnostics import REDACTED

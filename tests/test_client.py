@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 import json
 import logging
 import struct
+from dataclasses import dataclass
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -118,7 +118,10 @@ async def test_https_disables_certificate_verification() -> None:
     url = "https://inverter.local:443/getdev.cgi"
     session = _Session(_Response(b'{"ok": true}'))
     client = SolplanetClient(
-        "inverter.local", session, scheme="https", port=443  # type: ignore[arg-type]
+        "inverter.local",
+        session,
+        scheme="https",
+        port=443,  # type: ignore[arg-type]
     )
     assert await client.get("getdev.cgi") == {"ok": True}
     assert session.calls == [
@@ -142,6 +145,7 @@ async def test_http_post_serializes_dict() -> None:
 
 async def test_http_post_serializes_dataclass() -> None:
     """Request dataclasses are recursively converted before transport."""
+
     @dataclass
     class Payload:
         action: str
@@ -158,7 +162,7 @@ async def test_http_post_serializes_dataclass() -> None:
 @pytest.mark.parametrize(
     "failure",
     [
-        asyncio.TimeoutError(),
+        TimeoutError(),
         aiohttp.ClientConnectionError("connection reset"),
     ],
 )
@@ -181,15 +185,12 @@ async def test_http_retries_transient_failures(failure: Exception) -> None:
         ("json", json.JSONDecodeError),
     ],
 )
-async def test_http_exhausts_retries(
-    kind: str, expected: type[Exception]
-) -> None:
+async def test_http_exhausts_retries(kind: str, expected: type[Exception]) -> None:
     """The final transport, HTTP, or JSON error is preserved for callers."""
-    url = "http://1.2.3.4:8484/invinfo.cgi"
     if kind == "timeout":
         results: tuple[_Response | Exception, ...] = (
-            asyncio.TimeoutError(),
-            asyncio.TimeoutError(),
+            TimeoutError(),
+            TimeoutError(),
         )
     elif kind == "status":
         results = (_Response(status=503), _Response(status=503))
@@ -197,9 +198,11 @@ async def test_http_exhausts_retries(
         results = (_Response(b"not-json"), _Response(b"not-json"))
     session = _Session(*results)
     client = SolplanetClient("1.2.3.4", session, request_retries=1)  # type: ignore[arg-type]
-    with patch("custom_components.solplanet.client.asyncio.sleep", new=AsyncMock()):
-        with pytest.raises(expected):
-            await client.get("invinfo.cgi")
+    with (
+        patch("custom_components.solplanet.client.asyncio.sleep", new=AsyncMock()),
+        pytest.raises(expected),
+    ):
+        await client.get("invinfo.cgi")
 
 
 async def test_http_rejects_unsupported_method() -> None:
@@ -212,7 +215,9 @@ async def test_http_rejects_unsupported_method() -> None:
 async def test_http_rejects_negative_retry_budget() -> None:
     """A negative retry budget cannot execute a request."""
     client = SolplanetClient(
-        "1.2.3.4", _Session(), request_retries=-1  # type: ignore[arg-type]
+        "1.2.3.4",
+        _Session(),
+        request_retries=-1,  # type: ignore[arg-type]
     )
     with pytest.raises(RuntimeError, match="HTTP request failed: None"):
         await client.get("endpoint")
@@ -239,14 +244,10 @@ async def test_modbus_single_write_dry_run_and_send() -> None:
     """Single writes return frames in dry-run mode and otherwise send them."""
     api = _ModbusApi(MagicMock())
     api._send_modbus = AsyncMock(return_value={"data": 1})  # type: ignore[method-assign]
-    frame = await api.modbus_write_single_holding_register(
-        DataType.S16, 3, 40201, -2, dry_run=True
-    )
+    frame = await api.modbus_write_single_holding_register(DataType.S16, 3, 40201, -2, dry_run=True)
     assert isinstance(frame, str)
     api._send_modbus.assert_not_awaited()
-    assert await api.modbus_write_single_holding_register(
-        DataType.S16, 3, 40201, -2
-    ) == {"data": 1}
+    assert await api.modbus_write_single_holding_register(DataType.S16, 3, 40201, -2) == {"data": 1}
     api._send_modbus.assert_awaited_once_with(frame=frame, data_type=DataType.S16)
 
 
@@ -254,14 +255,10 @@ async def test_modbus_multiple_write_dry_run_and_send() -> None:
     """Multiple writes use U16 to decode the acknowledgement."""
     api = _ModbusApi(MagicMock())
     api._send_modbus = AsyncMock(return_value={"quantity": 2})  # type: ignore[method-assign]
-    frame = await api.modbus_write_multiple_holding_registers(
-        3, 40201, [1, 2], dry_run=True
-    )
+    frame = await api.modbus_write_multiple_holding_registers(3, 40201, [1, 2], dry_run=True)
     assert isinstance(frame, str)
     api._send_modbus.assert_not_awaited()
-    assert await api.modbus_write_multiple_holding_registers(3, 40201, [1, 2]) == {
-        "quantity": 2
-    }
+    assert await api.modbus_write_multiple_holding_registers(3, 40201, [1, 2]) == {"quantity": 2}
     api._send_modbus.assert_awaited_once_with(frame=frame, data_type=DataType.U16)
 
 
@@ -316,12 +313,11 @@ def test_schedule_slot_from_time_and_dict() -> None:
     """Human time strings and expanded mappings create the same slots."""
     expected = ScheduleSlot(8, 30, 2, "charge")
     assert ScheduleSlot.from_time("08:30", 2, "charge") == expected
-    assert ScheduleSlot.from_dict(
-        {"start": "08:30", "duration": 2, "mode": "charge"}
-    ) == expected
-    assert ScheduleSlot.from_dict(
-        {"start_hour": 8, "start_minute": 30, "duration": 2, "mode": "charge"}
-    ) == expected
+    assert ScheduleSlot.from_dict({"start": "08:30", "duration": 2, "mode": "charge"}) == expected
+    assert (
+        ScheduleSlot.from_dict({"start_hour": 8, "start_minute": 30, "duration": 2, "mode": "charge"})
+        == expected
+    )
 
 
 @pytest.mark.parametrize(
@@ -334,9 +330,7 @@ def test_schedule_slot_from_time_and_dict() -> None:
         ("08:00", 1, "idle", "Mode must be 'charge' or 'discharge'"),
     ],
 )
-def test_schedule_slot_from_time_validation(
-    start: str, duration: int, mode: str, message: str
-) -> None:
+def test_schedule_slot_from_time_validation(start: str, duration: int, mode: str, message: str) -> None:
     """Invalid human schedule fields produce specific validation errors."""
     with pytest.raises(ValueError, match=message):
         ScheduleSlot.from_time(start, duration, mode)
@@ -371,19 +365,13 @@ def test_schedule_slot_rejects_midnight_crossing() -> None:
 
 def test_schedule_slot_list_validation() -> None:
     """Valid slots may be unsorted but cannot overlap or exceed six per day."""
-    ScheduleSlot.validate_slots(
-        [ScheduleSlot(10, 30, 1, "charge"), ScheduleSlot(8, 0, 2, "discharge")]
-    )
+    ScheduleSlot.validate_slots([ScheduleSlot(10, 30, 1, "charge"), ScheduleSlot(8, 0, 2, "discharge")])
     with pytest.raises(ValueError, match="Maximum 6 slots"):
         ScheduleSlot.validate_slots([ScheduleSlot(hour, 0, 1, "charge") for hour in range(7)])
     with pytest.raises(ValueError, match="overlaps"):
-        ScheduleSlot.validate_slots(
-            [ScheduleSlot(8, 0, 2, "charge"), ScheduleSlot(9, 30, 1, "discharge")]
-        )
+        ScheduleSlot.validate_slots([ScheduleSlot(8, 0, 2, "charge"), ScheduleSlot(9, 30, 1, "discharge")])
     with pytest.raises(ValueError, match="overlaps"):
-        ScheduleSlot.validate_slots(
-            [ScheduleSlot(8, 30, 1, "charge"), ScheduleSlot(9, 0, 1, "discharge")]
-        )
+        ScheduleSlot.validate_slots([ScheduleSlot(8, 30, 1, "charge"), ScheduleSlot(9, 0, 1, "discharge")])
 
 
 def test_battery_schedule_decode_and_encode() -> None:
@@ -399,18 +387,18 @@ def test_battery_schedule_decode_and_encode() -> None:
     assert decoded["Mon"] == [first]
     assert decoded["Tus"] == []
     assert set(decoded) == set(BatterySchedule.DAYS)
-    assert BatterySchedule.encode_schedule(
-        {"Mon": [first], "Tus": []}, pin=123, pout=456
-    ) == {"Mon": [first.to_raw()], "Pin": 123, "Pout": 456}
+    assert BatterySchedule.encode_schedule({"Mon": [first], "Tus": []}, pin=123, pout=456) == {
+        "Mon": [first.to_raw()],
+        "Pin": 123,
+        "Pout": 456,
+    }
 
 
 @pytest.mark.parametrize(
     ("model_type", "serial", "expected"),
     [(11, "INV", True), (20, None, True), (10, "BE123", True), (10, "INV", False), (None, None, False)],
 )
-def test_inverter_storage_detection(
-    model_type: int | None, serial: str | None, expected: bool
-) -> None:
+def test_inverter_storage_detection(model_type: int | None, serial: str | None, expected: bool) -> None:
     """Storage capability follows model codes and BE serial prefixes."""
     assert GetInverterInfoItemResponse(mty=model_type, isn=serial).isStorage() is expected
 
@@ -440,7 +428,7 @@ def test_inverter_storage_detection(
     ],
 )
 async def test_api_data_getters(
-    api_class: type[SolplanetApiV1] | type[SolplanetApiV2],
+    api_class: type[SolplanetApiV1 | SolplanetApiV2],
     method: str,
     endpoint: str,
     payload: dict,
@@ -508,7 +496,7 @@ async def test_v2_indexed_meter_data_preserves_three_phase_payload() -> None:
     [(SolplanetApiV1, "invinfo.cgi"), (SolplanetApiV2, "getdev.cgi?device=2")],
 )
 async def test_api_inverter_info_nested_mapping(
-    api_class: type[SolplanetApiV1] | type[SolplanetApiV2], endpoint: str
+    api_class: type[SolplanetApiV1 | SolplanetApiV2], endpoint: str
 ) -> None:
     """Nested inverter dictionaries become nested dataclasses."""
     client = MagicMock()
@@ -516,9 +504,7 @@ async def test_api_inverter_info_nested_mapping(
         return_value={"num": 1, "inv": [{"isn": "INV", "mty": 11, "future": 1}], "future": 2}
     )
     result = await api_class(client).get_inverter_info()
-    assert result == GetInverterInfoResponse(
-        inv=[GetInverterInfoItemResponse(isn="INV", mty=11)], num=1
-    )
+    assert result == GetInverterInfoResponse(inv=[GetInverterInfoItemResponse(isn="INV", mty=11)], num=1)
     client.get.assert_awaited_once_with(endpoint)
 
 
@@ -526,14 +512,10 @@ async def test_api_inverter_info_nested_mapping(
 async def test_v2_battery_info_nested_mapping(battery: dict | None) -> None:
     """Battery detail is optional and unknown firmware keys are ignored."""
     client = MagicMock()
-    client.get = AsyncMock(
-        return_value={"type": 1, "mod_r": 2, "battery": battery, "future": 3}
-    )
+    client.get = AsyncMock(return_value={"type": 1, "mod_r": 2, "battery": battery, "future": 3})
     result = await SolplanetApiV2(client).get_battery_info("BAT")
     assert isinstance(result, GetBatteryInfoResponse)
-    assert result.battery == (
-        None if battery is None else GetBatteryInfoItemResponse(bid=1, partno="P")
-    )
+    assert result.battery == (None if battery is None else GetBatteryInfoItemResponse(bid=1, partno="P"))
     client.get.assert_awaited_once_with("getdev.cgi?device=4&sn=BAT")
 
 
@@ -603,9 +585,7 @@ async def test_v2_get_schedule() -> None:
         ({"dat": "failed"}, True),
     ],
 )
-async def test_v2_set_schedule_power_response_validation(
-    response: object, raises: bool
-) -> None:
+async def test_v2_set_schedule_power_response_validation(response: object, raises: bool) -> None:
     """Explicit schedule failures raise while known and opaque successes pass."""
     current = {
         "slots": {day: [] for day in BatterySchedule.DAYS},
@@ -665,9 +645,7 @@ async def test_v2_schedule_pin_and_pout_helpers() -> None:
         ({"dat": "no"}, True),
     ],
 )
-async def test_v2_set_schedule_slots_response_validation(
-    response: object, raises: bool
-) -> None:
+async def test_v2_set_schedule_slots_response_validation(response: object, raises: bool) -> None:
     """Raw slot writes use the same explicit-failure rules as power writes."""
     client = MagicMock()
     client.post = AsyncMock(return_value=response)
@@ -696,10 +674,16 @@ async def test_grid_register_read_uses_validated_function04_frame(status: int, r
     client.post.assert_awaited_once_with("fdbg.cgi", {"data": "0304056e00015139"})
 
 
-@pytest.mark.parametrize("body", [
-    b"", b"\x04\x04\x02\x00\x01", b"\x03\x03\x02\x00\x01",
-    b"\x03\x04\x00\x00\x01", b"\x03\x04\x04\x00\x01\x00\x00",
-])
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"",
+        b"\x04\x04\x02\x00\x01",
+        b"\x03\x03\x02\x00\x01",
+        b"\x03\x04\x00\x00\x01",
+        b"\x03\x04\x04\x00\x01\x00\x00",
+    ],
+)
 async def test_grid_register_rejects_mismatched_response(body: bytes) -> None:
     """Valid checksums do not make a wrong slave, function or byte count acceptable."""
     client = MagicMock()
@@ -710,28 +694,33 @@ async def test_grid_register_rejects_mismatched_response(body: bytes) -> None:
 
 async def test_grid_register_crc_failure_and_exception_response() -> None:
     client = MagicMock()
-    client.post = AsyncMock(side_effect=[
-        {"data": "03040200010131"},
-        {"data": _crc_frame(b"\x03\x84\x02")},
-    ])
+    client.post = AsyncMock(
+        side_effect=[
+            {"data": "03040200010131"},
+            {"data": _crc_frame(b"\x03\x84\x02")},
+        ]
+    )
     api = _ModbusApi(client)
     with pytest.raises(ValueError, match="CRC"):
         await api.modbus_read_input_registers(DataType.U16, 3, 31391)
     assert await api.modbus_read_input_registers(DataType.U16, 3, 31391) == {
-        "device_id": 3, "error_function_code": 0x84, "exception_code": 2,
+        "device_id": 3,
+        "error_function_code": 0x84,
+        "exception_code": 2,
     }
 
 
 async def test_modbus_read_validation_preserves_write_acknowledgements() -> None:
     """Read-response validation leaves the existing write acknowledgement path intact."""
     client = MagicMock()
-    frame = ModbusRtuFrameGenerator().generate_write_single_holding_register_frame(
-        7, 40201, 1, DataType.U16
-    )
+    frame = ModbusRtuFrameGenerator().generate_write_single_holding_register_frame(7, 40201, 1, DataType.U16)
     client.post = AsyncMock(return_value={"data": frame})
-    assert await _ModbusApi(client).modbus_write_single_holding_register(
-        DataType.U16, 7, 40201, 1
-    ) == {"device_id": 7, "function_code": 6, "register_address": 200, "data": 1}
+    assert await _ModbusApi(client).modbus_write_single_holding_register(DataType.U16, 7, 40201, 1) == {
+        "device_id": 7,
+        "function_code": 6,
+        "register_address": 200,
+        "data": 1,
+    }
 
 
 @pytest.mark.parametrize("scheme, port", [("http", 18084), ("https", 9443)])
@@ -746,10 +735,19 @@ async def test_grid_register_uses_configured_connection(scheme: str, port: int) 
     assert options["json"]["data"].startswith("0704056e0001")
 
 
-@pytest.mark.parametrize("response, expected", [
-    (0, 0), (1, 1), (True, None), (None, None), (65535, None),
-    ("1", None), ([1], None), ({"exception_code": 4}, None),
-])
+@pytest.mark.parametrize(
+    "response, expected",
+    [
+        (0, 0),
+        (1, 1),
+        (True, None),
+        (None, None),
+        (65535, None),
+        ("1", None),
+        ([1], None),
+        ({"exception_code": 4}, None),
+    ],
+)
 async def test_get_grid_status_validates_response(response: object, expected: int | None) -> None:
     api = SolplanetApiV2(MagicMock())
     api.modbus_read_input_registers = AsyncMock(return_value=response)

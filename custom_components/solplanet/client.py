@@ -9,11 +9,11 @@ This module contains:
 
 import asyncio
 import base64
-from dataclasses import asdict, dataclass, fields, is_dataclass
 import json
 import logging
 import time
-from typing import Any, cast
+from dataclasses import asdict, dataclass, fields, is_dataclass
+from typing import Any, ClassVar, cast
 
 from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout
 
@@ -66,9 +66,7 @@ class SolplanetClient:
     async def post(self, endpoint: str, data: Any) -> Any:
         """Make POST request to specified endpoint."""
         # Allow dataclass request models
-        payload: Any = (
-            asdict(data) if is_dataclass(data) and not isinstance(data, type) else data
-        )
+        payload: Any = asdict(data) if is_dataclass(data) and not isinstance(data, type) else data
         return await self._request("POST", endpoint, json_payload=payload)
 
     async def _request(
@@ -98,7 +96,7 @@ class SolplanetClient:
                     async with self.session.post(url, json=json_payload, **kwargs) as resp:
                         return await self._parse_response(resp)
                 raise RuntimeError(f"Unsupported method: {method}")
-            except (asyncio.TimeoutError, ClientError, json.JSONDecodeError) as err:
+            except (TimeoutError, ClientError, json.JSONDecodeError) as err:
                 last_err = err
                 if attempt >= self.request_retries:
                     raise
@@ -254,16 +252,10 @@ class ModbusApiMixin:
                 raise ValueError("Modbus read response has an unexpected device address")
             if reply[1] != (request[1] | 0x80):
                 expected_bytes = int.from_bytes(request[4:6], "big") * 2
-                if (
-                    reply[1] != request[1]
-                    or len(reply) != expected_bytes + 5
-                    or reply[2] != expected_bytes
-                ):
+                if reply[1] != request[1] or len(reply) != expected_bytes + 5 or reply[2] != expected_bytes:
                     raise ValueError("Modbus read response does not match the requested registers")
 
-        data = ModbusRtuFrameGenerator().decode_response(
-            response_hex=response_frame, data_type=data_type
-        )
+        data = ModbusRtuFrameGenerator().decode_response(response_hex=response_frame, data_type=data_type)
         _LOGGER.debug("Modbus RTU response decoded: %s", data)
 
         return data
@@ -293,7 +285,7 @@ class BatteryWorkMode:
 class BatteryWorkModes:
     """Helper to for BatteryWorkMode."""
 
-    _battery_modes: list[BatteryWorkMode] = [
+    _battery_modes: ClassVar[list[BatteryWorkMode]] = [
         BatteryWorkMode("Self-consumption mode", 2, 1),
         BatteryWorkMode("Reserve power mode", 3, 1),
         BatteryWorkMode("Custom mode", 4, 1),
@@ -460,7 +452,7 @@ class ScheduleSlot:
 class BatterySchedule:
     """Helper for battery schedule operations."""
 
-    DAYS = ["Mon", "Tus", "Wen", "Thu", "Fri", "Sat", "Sun"]
+    DAYS: ClassVar[list[str]] = ["Mon", "Tus", "Wen", "Thu", "Fri", "Sat", "Sun"]
 
     @staticmethod
     def decode_schedule(raw_schedule: dict) -> dict[str, list[ScheduleSlot]]:
@@ -663,6 +655,7 @@ class GetMeterDataResponse:
     pf_phs: list[int] | None = None
     ang_phs: list[int] | None = None
 
+
 @dataclass
 class GetMeterInfoResponse:
     """Get meter info response.
@@ -693,8 +686,8 @@ class GetMeterInfoResponse:
     enb: int | None = None
     exp_m: int | None = None
     regulate: int | None = None
-    enb_PF: int | None = None  # noqa: N815
-    target_PF: int | None = None  # noqa: N815
+    enb_PF: int | None = None
+    target_PF: int | None = None
     total_pac: int | None = None
     total_fac: int | None = None
     meter_pac: int | None = None
@@ -1000,9 +993,7 @@ class SolplanetApiV1(ModbusApiMixin):
         response = await self.client.get("pwrlim.cgi")
         return self._create_class_from_dict(GetMeterInfoResponse, response)
 
-    def _create_class_from_dict[T](
-        self, cls: type[T], data: dict[str, Any]
-    ) -> T:
+    def _create_class_from_dict[T](self, cls: type[T], data: dict[str, Any]) -> T:
         """Create dataclass instance from dict."""
         allowed = {f.name for f in fields(cast(Any, cls))}
         return cls(**{k: v for k, v in data.items() if k in allowed})
@@ -1181,9 +1172,7 @@ class SolplanetApiV2(ModbusApiMixin):
             if rsp.get("dat") is not None and rsp.get("dat") != "ok":
                 raise RuntimeError(f"Schedule update failed: {rsp}")
 
-    def _create_class_from_dict[T](
-        self, cls: type[T], data: dict[str, Any]
-    ) -> T:
+    def _create_class_from_dict[T](self, cls: type[T], data: dict[str, Any]) -> T:
         """Create dataclass instance from dict."""
         allowed = {f.name for f in fields(cast(Any, cls))}
         return cls(**{k: v for k, v in data.items() if k in allowed})
@@ -1193,30 +1182,24 @@ class SolplanetApiV2(ModbusApiMixin):
 SolplanetApi = SolplanetApiV2
 
 __all__ = [
-    # HTTP Client
-    "SolplanetClient",
-    # Modbus Mixin
-    "ModbusApiMixin",
-    # Helper Classes
+    "BatterySchedule",
     "BatteryWorkMode",
     "BatteryWorkModes",
-    "ScheduleSlot",
-    "BatterySchedule",
-    # Response Models
+    "GetBatteryDataResponse",
+    "GetBatteryInfoItemResponse",
+    "GetBatteryInfoResponse",
     "GetInverterDataResponse",
     "GetInverterInfoItemResponse",
     "GetInverterInfoResponse",
     "GetMeterDataResponse",
     "GetMeterInfoResponse",
-    "GetBatteryDataResponse",
-    "GetBatteryInfoItemResponse",
-    "GetBatteryInfoResponse",
-    # Request Models
-    "SetBatteryConfigValueRequest",
+    "ModbusApiMixin",
+    "ScheduleSlot",
     "SetBatteryConfigRequest",
+    "SetBatteryConfigValueRequest",
     "SetScheduleRequest",
-    # API Clients
+    "SolplanetApi",
     "SolplanetApiV1",
     "SolplanetApiV2",
-    "SolplanetApi",
+    "SolplanetClient",
 ]

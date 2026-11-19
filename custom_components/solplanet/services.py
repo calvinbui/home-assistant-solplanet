@@ -81,24 +81,24 @@ async def get_isn_from_target(hass: HomeAssistant, target: ServiceTarget) -> lis
         entity_reg = er.async_get(hass)
         entity_ids = target["entity_id"] if isinstance(target["entity_id"], list) else [target["entity_id"]]
         for entity_id in entity_ids:
-            if (entry := entity_reg.async_get(entity_id)) and entry.device_id:
-                if device := device_reg.async_get(entry.device_id):
-                    if isn := _isn_from_device(device):
-                        isns.add(isn)
+            if (
+                (entry := entity_reg.async_get(entity_id))
+                and entry.device_id
+                and (device := device_reg.async_get(entry.device_id))
+                and (isn := _isn_from_device(device))
+            ):
+                isns.add(isn)
 
     if "device_id" in target:
         device_ids = target["device_id"] if isinstance(target["device_id"], list) else [target["device_id"]]
         for device_id in device_ids:
-            if device := device_reg.async_get(device_id):
-                if isn := _isn_from_device(device):
-                    isns.add(isn)
+            if (device := device_reg.async_get(device_id)) and (isn := _isn_from_device(device)):
+                isns.add(isn)
 
     return list(isns)
 
 
-async def get_meter_isn_from_target(
-    hass: HomeAssistant, target: ServiceTarget
-) -> list[str]:
+async def get_meter_isn_from_target(hass: HomeAssistant, target: ServiceTarget) -> list[str]:
     """Get meter serial(s) from target entity_ids or device_ids."""
     isns: set[str] = set()
 
@@ -109,12 +109,15 @@ async def get_meter_isn_from_target(
         entity_reg = er.async_get(hass)
         entity_ids = target["entity_id"] if isinstance(target["entity_id"], list) else [target["entity_id"]]
         for entity_id in entity_ids:
-            if (entry := entity_reg.async_get(entity_id)) and entry.device_id:
-                if device := device_reg.async_get(entry.device_id):
-                    for identifier in device.identifiers:
-                        if identifier[0] == DOMAIN and identifier[1].startswith(prefix):
-                            isns.add(identifier[1].removeprefix(prefix))
-                            break
+            if (
+                (entry := entity_reg.async_get(entity_id))
+                and entry.device_id
+                and (device := device_reg.async_get(entry.device_id))
+            ):
+                for identifier in device.identifiers:
+                    if identifier[0] == DOMAIN and identifier[1].startswith(prefix):
+                        isns.add(identifier[1].removeprefix(prefix))
+                        break
 
     if "device_id" in target:
         device_ids = target["device_id"] if isinstance(target["device_id"], list) else [target["device_id"]]
@@ -277,9 +280,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     current_schedule = schedule_data.get("slots") or {}
 
                     if call.data["day"] == "all":
-                        new_slots: dict[str, list[ScheduleSlot]] = {
-                            day: [] for day in BatterySchedule.DAYS
-                        }
+                        new_slots: dict[str, list[ScheduleSlot]] = {day: [] for day in BatterySchedule.DAYS}
                     else:
                         # Keep other days unchanged
                         new_slots = dict(current_schedule)
@@ -362,9 +363,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 )
             payload["targetPer"] = int(call.data["targetPer"])
 
-        def _validate_power_limits(
-            coordinator: object, payload: MeterPayload
-        ) -> None:
+        def _validate_power_limits(coordinator: object, payload: MeterPayload) -> None:
             max_rate = 10000
             if hasattr(coordinator, "get_max_inverter_rate_w"):
                 try:
@@ -462,7 +461,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 probatio.Optional("entity_id"): probatio.Any(str, [str]),
                 probatio.Optional("device_id"): probatio.Any(str, [str]),
                 probatio.Required("day"): probatio.In(BatterySchedule.DAYS),
-                probatio.Required("slots"): probatio.All([_REPLACE_SCHEDULE_SLOT_SCHEMA], probatio.Length(max=6)),
+                probatio.Required("slots"): probatio.All(
+                    [_REPLACE_SCHEDULE_SLOT_SCHEMA], probatio.Length(max=6)
+                ),
                 probatio.Optional("pin"): _SCHEDULE_POWER_SCHEMA,
                 probatio.Optional("pout"): _SCHEDULE_POWER_SCHEMA,
             }
@@ -478,9 +479,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 probatio.Optional("entity_id"): probatio.Any(str, [str]),
                 probatio.Optional("device_id"): probatio.Any(str, [str]),
                 probatio.Required("day"): probatio.In(BatterySchedule.DAYS),
-                probatio.Required("start_hour"): probatio.All(probatio.Coerce(int), probatio.Range(min=0, max=23)),
+                probatio.Required("start_hour"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=0, max=23)
+                ),
                 probatio.Required("start_minute"): probatio.In([0, 30]),
-                probatio.Required("duration"): probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=4)),
+                probatio.Required("duration"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=1, max=4)
+                ),
                 probatio.Required("mode"): probatio.In(["charge", "discharge"]),
             }
         ),
@@ -511,12 +516,22 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 probatio.Required("abs"): probatio.All(probatio.Coerce(int), probatio.In([0, 1])),
                 probatio.Required("limitType"): probatio.All(probatio.Coerce(int), probatio.In([0, 1])),
                 # Actual upper bound depends on inverter `rate`; validated in the handler.
-                probatio.Optional("target"): probatio.All(probatio.Coerce(int), probatio.Range(min=0, max=50000)),
-                probatio.Optional("targetPer"): probatio.All(probatio.Coerce(int), probatio.Range(min=0, max=100)),
-                probatio.Required("powerDiff"): probatio.All(probatio.Coerce(int), probatio.Range(min=-1000, max=1000)),
-                probatio.Required("lostTime"): probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=60)),
+                probatio.Optional("target"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=0, max=50000)
+                ),
+                probatio.Optional("targetPer"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=0, max=100)
+                ),
+                probatio.Required("powerDiff"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=-1000, max=1000)
+                ),
+                probatio.Required("lostTime"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=1, max=60)
+                ),
                 # Actual upper bound depends on inverter `rate`; validated in the handler.
-                probatio.Required("lostPowerMax"): probatio.All(probatio.Coerce(int), probatio.Range(min=0, max=50000)),
+                probatio.Required("lostPowerMax"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=0, max=50000)
+                ),
             }
         ),
     )
@@ -529,12 +544,22 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             {
                 probatio.Required("device_id"): probatio.Any(str, [str]),
                 probatio.Optional("entity_id"): probatio.Any(str, [str]),
-                probatio.Required("maxOutCurr"): probatio.All(probatio.Coerce(int), probatio.Range(min=0, max=3000)),
-                probatio.Required("maxInCurr"): probatio.All(probatio.Coerce(int), probatio.Range(min=0, max=3000)),
-                probatio.Required("currDiff"): probatio.All(probatio.Coerce(int), probatio.Range(min=-10, max=10)),
-                probatio.Required("lostTime"): probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=60)),
+                probatio.Required("maxOutCurr"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=0, max=3000)
+                ),
+                probatio.Required("maxInCurr"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=0, max=3000)
+                ),
+                probatio.Required("currDiff"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=-10, max=10)
+                ),
+                probatio.Required("lostTime"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=1, max=60)
+                ),
                 # Actual upper bound depends on maxOutCurr; validated in the handler.
-                probatio.Required("lostCurrMax"): probatio.All(probatio.Coerce(int), probatio.Range(min=0, max=3000)),
+                probatio.Required("lostCurrMax"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=0, max=3000)
+                ),
             }
         ),
     )
@@ -547,7 +572,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             {
                 probatio.Required("device_id"): probatio.Any(str, [str]),
                 probatio.Optional("entity_id"): probatio.Any(str, [str]),
-                probatio.Required("lostTime"): probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=60)),
+                probatio.Required("lostTime"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=1, max=60)
+                ),
             }
         ),
     )

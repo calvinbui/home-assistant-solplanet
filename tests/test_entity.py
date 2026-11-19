@@ -18,7 +18,6 @@ from custom_components.solplanet.entity import (
     get_entity_unique_id,
 )
 from custom_components.solplanet.exceptions import InverterInSleepModeError
-
 from tests.helpers import FakeCoordinator
 
 
@@ -45,9 +44,7 @@ def _coordinator(payload) -> FakeCoordinator:
 
 def test_unique_id_uses_stable_device_type_and_optional_suffix() -> None:
     """Entity unique IDs retain the legacy inverter format and disambiguate other devices."""
-    assert get_entity_unique_id(_description(data_field_path=["vac", 1]), "INV") == (
-        "solplanet_INV_vac_1"
-    )
+    assert get_entity_unique_id(_description(data_field_path=["vac", 1]), "INV") == ("solplanet_INV_vac_1")
     battery = _description(
         data_field_device_type=BATTERY_IDENTIFIER,
         unique_id_suffix="state",
@@ -74,19 +71,13 @@ def test_entity_reads_dict_object_and_list_paths_and_transforms_value() -> None:
 def test_missing_invalid_and_nan_values_become_unknown() -> None:
     """Missing fields, invalid list indices and sentinel values map to Unknown."""
     coordinator = _coordinator({"values": [1]})
-    out_of_range = SolplanetEntity(
-        _description(data_field_path=["values", 9]), "inv-1", coordinator
-    )
+    out_of_range = SolplanetEntity(_description(data_field_path=["values", 9]), "inv-1", coordinator)
     assert out_of_range._attr_native_value is None
 
-    invalid_index = SolplanetEntity(
-        _description(data_field_path=["values", "invalid"]), "inv-1", coordinator
-    )
+    invalid_index = SolplanetEntity(_description(data_field_path=["values", "invalid"]), "inv-1", coordinator)
     assert invalid_index._attr_native_value is None
 
-    scalar_path = SolplanetEntity(
-        _description(data_field_path=["values", 0, "child"]), "inv-1", coordinator
-    )
+    scalar_path = SolplanetEntity(_description(data_field_path=["values", 0, "child"]), "inv-1", coordinator)
     assert scalar_path._attr_native_value is None
 
     nan = SolplanetEntity(
@@ -166,9 +157,7 @@ def test_extra_state_attributes_are_optional_and_failure_safe() -> None:
     )
     assert described.extra_state_attributes == {"double": 14}
 
-    broken = SolplanetEntity(
-        _description(attributes_fn=lambda _data: 1 / 0), "inv-1", coordinator
-    )
+    broken = SolplanetEntity(_description(attributes_fn=lambda _data: 1 / 0), "inv-1", coordinator)
     assert broken.extra_state_attributes is None
 
     coordinator.data[INVERTER_IDENTIFIER].clear()

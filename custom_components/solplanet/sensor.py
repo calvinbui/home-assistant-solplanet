@@ -118,9 +118,7 @@ def _power_limit_control(data: Any) -> str | None:
     if _power_limit_int(data, "regulate") != 10:
         return "Disabled"
 
-    has_ctrl_type = (
-        "ctrlType" in data if isinstance(data, dict) else hasattr(data, "ctrlType")
-    )
+    has_ctrl_type = "ctrlType" in data if isinstance(data, dict) else hasattr(data, "ctrlType")
     if not has_ctrl_type:
         return "Limit power"
     ctrl_type = _power_limit_int(data, "ctrlType")
@@ -192,9 +190,7 @@ def _create_power_limit_entities_description(
     compatibility: bool,
 ) -> list[SolplanetSensorEntityDescription]:
     """Create readable diagnostic entities for either meter-limit protocol."""
-    phase_mode_mapper = _power_limit_enum(
-        "abs", {0: "Phase-balanced", 1: "Phase-specific"}
-    )
+    phase_mode_mapper = _power_limit_enum("abs", {0: "Phase-balanced", 1: "Phase-specific"})
     entities = [
         _power_limit_sensor(
             isn,
@@ -231,9 +227,7 @@ def _create_power_limit_entities_description(
                 isn,
                 data_type,
                 "power_limit_type",
-                mapper=_power_limit_enum(
-                    "limitType", {0: "Absolute power", 1: "Percentage of rated power"}
-                ),
+                mapper=_power_limit_enum("limitType", {0: "Absolute power", 1: "Percentage of rated power"}),
                 device_class=SensorDeviceClass.ENUM,
             ),
             _power_limit_sensor(

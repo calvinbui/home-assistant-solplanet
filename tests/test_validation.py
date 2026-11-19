@@ -10,7 +10,6 @@ from custom_components.solplanet.validation import (
     retain_previous_battery_energy_values,
 )
 
-
 _CORE_FIELDS = ("cst", "bst", "vb", "tb", "soc", "soh", "cli", "clo")
 
 
