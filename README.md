@@ -17,7 +17,7 @@ This repository is a fork of the upstream integration by [`zbigniewmotyka`](http
 
 ## Requirements
 
-- Home Assistant 2026.3.0 or newer
+- Home Assistant 2026.9.0 or newer
 - A compatible Solplanet inverter and network-connected smart dongle
 - The dongle IP address or hostname, reachable from Home Assistant
 

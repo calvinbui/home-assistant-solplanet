@@ -4,7 +4,7 @@
 
 You need:
 
-- Home Assistant 2026.3.0 or newer.
+- Home Assistant 2026.9.0 or newer.
 - A Solplanet inverter with a network-connected smart dongle.
 - The IP address or hostname of the dongle.
 - Network access from Home Assistant to the dongle.

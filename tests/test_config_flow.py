@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-import voluptuous as vol
+import probatio
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_MAC
 from homeassistant.data_entry_flow import FlowResultType
@@ -95,7 +95,7 @@ def test_interval_schema_accepts_defaults_and_supported_bounds() -> None:
 @pytest.mark.parametrize("interval", [9, 3601, "not-a-number"])
 def test_interval_schema_rejects_unsupported_values(interval) -> None:
     """Values outside the supported polling range are rejected."""
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(probatio.Invalid):
         STEP_USER_DATA_SCHEMA({CONF_HOST: "inverter.local", CONF_INTERVAL: interval})
 
 

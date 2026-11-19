@@ -51,7 +51,7 @@ body:
     attributes:
       label: Home Assistant version
       description: The Home Assistant Core version
-      placeholder: "2026.3.0"
+      placeholder: "2026.11.0"
     validations:
       required: true
 
