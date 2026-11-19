@@ -166,20 +166,10 @@ class SolplanetEntity(CoordinatorEntity[SolplanetDataUpdateCoordinator], Entity)
     @override
     def device_info(self) -> DeviceInfo:
         """Return device information about this sensor."""
-        return (
-            {
-                "identifiers": {(DOMAIN, self._isn)},
-            }
-            if self.entity_description.data_field_device_type == INVERTER_IDENTIFIER
-            else {
-                "identifiers": {
-                    (
-                        DOMAIN,
-                        f"{self.entity_description.data_field_device_type}_{self._isn or ''}",
-                    )
-                },
-            }
-        )
+        device_type = self.entity_description.data_field_device_type
+        if device_type == INVERTER_IDENTIFIER:
+            return DeviceInfo(identifiers={(DOMAIN, self._isn)})
+        return DeviceInfo(identifiers={(DOMAIN, f"{device_type}_{self._isn or ''}")})
 
     @property
     @override

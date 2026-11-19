@@ -6,7 +6,7 @@ from ipaddress import ip_address
 import logging
 from typing import Any, cast, override
 
-import voluptuous as vol
+import probatio
 from homeassistant.config_entries import (
     ConfigFlow,
     ConfigFlowResult,
@@ -35,11 +35,11 @@ from .validation import normalize_mac_address
 
 _LOGGER = logging.getLogger(__name__)
 
-STEP_USER_DATA_SCHEMA = vol.Schema(
+STEP_USER_DATA_SCHEMA = probatio.Schema(
     {
-        vol.Required(CONF_HOST): str,
-        vol.Required(CONF_INTERVAL, default=DEFAULT_INTERVAL): vol.All(
-            vol.Coerce(int), vol.Range(min=MIN_INTERVAL, max=MAX_INTERVAL)
+        probatio.Required(CONF_HOST): str,
+        probatio.Required(CONF_INTERVAL, default=DEFAULT_INTERVAL): probatio.All(
+            probatio.Coerce(int), probatio.Range(min=MIN_INTERVAL, max=MAX_INTERVAL)
         ),
     }
 )
@@ -336,14 +336,14 @@ class SolplanetOptionsFlow(OptionsFlow):
 
         # Show form with current interval value
         current_interval = self._config_entry.data.get(CONF_INTERVAL, DEFAULT_INTERVAL)
-        schema = vol.Schema(
+        schema = probatio.Schema(
             {
-                vol.Required(
+                probatio.Required(
                     CONF_MODBUS_TELEMETRY_FALLBACKS,
                     default=self._config_entry.data.get(CONF_MODBUS_TELEMETRY_FALLBACKS, False),
                 ): bool,
-                vol.Required(CONF_INTERVAL, default=current_interval): vol.All(
-                    vol.Coerce(int), vol.Range(min=MIN_INTERVAL, max=MAX_INTERVAL)
+                probatio.Required(CONF_INTERVAL, default=current_interval): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=MIN_INTERVAL, max=MAX_INTERVAL)
                 ),
             }
         )

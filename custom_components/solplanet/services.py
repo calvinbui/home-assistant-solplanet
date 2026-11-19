@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 
-import voluptuous as vol
+import probatio
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
@@ -21,7 +21,7 @@ type MeterPayloadValidator = Callable[[object, MeterPayload], None]
 def _coerce_schedule_int(value: object) -> int:
     """Coerce integral schedule values without truncating fractions or accepting booleans."""
     if isinstance(value, bool):
-        raise vol.Invalid("Expected an integer")
+        raise probatio.Invalid("Expected an integer")
     if isinstance(value, int):
         return value
     if isinstance(value, float) and value.is_integer():
@@ -30,22 +30,22 @@ def _coerce_schedule_int(value: object) -> int:
         try:
             return int(value)
         except ValueError as err:
-            raise vol.Invalid("Expected an integer") from err
-    raise vol.Invalid("Expected an integer")
+            raise probatio.Invalid("Expected an integer") from err
+    raise probatio.Invalid("Expected an integer")
 
 
-_REPLACE_SCHEDULE_SLOT_SCHEMA = vol.Schema(
+_REPLACE_SCHEDULE_SLOT_SCHEMA = probatio.Schema(
     {
-        vol.Required("start_hour"): vol.All(_coerce_schedule_int, vol.Range(min=0, max=23)),
-        vol.Required("start_minute"): vol.All(_coerce_schedule_int, vol.In([0, 30])),
-        vol.Required("duration"): vol.All(_coerce_schedule_int, vol.Range(min=1, max=4)),
-        vol.Required("mode"): vol.In(["charge", "discharge"]),
+        probatio.Required("start_hour"): probatio.All(_coerce_schedule_int, probatio.Range(min=0, max=23)),
+        probatio.Required("start_minute"): probatio.All(_coerce_schedule_int, probatio.In([0, 30])),
+        probatio.Required("duration"): probatio.All(_coerce_schedule_int, probatio.Range(min=1, max=4)),
+        probatio.Required("mode"): probatio.In(["charge", "discharge"]),
     }
 )
 
-_SCHEDULE_POWER_SCHEMA = vol.All(
+_SCHEDULE_POWER_SCHEMA = probatio.All(
     _coerce_schedule_int,
-    vol.Range(min=0, max=10000),
+    probatio.Range(min=0, max=10000),
 )
 
 
@@ -70,7 +70,7 @@ async def get_isn_from_target(hass: HomeAssistant, target: ServiceTarget) -> lis
     prefix = f"{BATTERY_IDENTIFIER}_"
     device_reg = dr.async_get(hass)
 
-    def _isn_from_device(device: dr.DeviceEntry) -> str | None:
+    def _isn_from_device(device: dr.BaseDeviceEntry) -> str | None:
         for identifier in device.identifiers:
             if identifier[0] == DOMAIN and identifier[1].startswith(prefix):
                 return identifier[1].removeprefix(prefix)
@@ -457,14 +457,14 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "replace_schedule_day",
         replace_schedule_day,
-        schema=vol.Schema(
+        schema=probatio.Schema(
             {
-                vol.Optional("entity_id"): vol.Any(str, [str]),
-                vol.Optional("device_id"): vol.Any(str, [str]),
-                vol.Required("day"): vol.In(BatterySchedule.DAYS),
-                vol.Required("slots"): vol.All([_REPLACE_SCHEDULE_SLOT_SCHEMA], vol.Length(max=6)),
-                vol.Optional("pin"): _SCHEDULE_POWER_SCHEMA,
-                vol.Optional("pout"): _SCHEDULE_POWER_SCHEMA,
+                probatio.Optional("entity_id"): probatio.Any(str, [str]),
+                probatio.Optional("device_id"): probatio.Any(str, [str]),
+                probatio.Required("day"): probatio.In(BatterySchedule.DAYS),
+                probatio.Required("slots"): probatio.All([_REPLACE_SCHEDULE_SLOT_SCHEMA], probatio.Length(max=6)),
+                probatio.Optional("pin"): _SCHEDULE_POWER_SCHEMA,
+                probatio.Optional("pout"): _SCHEDULE_POWER_SCHEMA,
             }
         ),
     )
@@ -473,15 +473,15 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "set_schedule_slots",
         set_schedule_slots,
-        schema=vol.Schema(
+        schema=probatio.Schema(
             {
-                vol.Optional("entity_id"): vol.Any(str, [str]),
-                vol.Optional("device_id"): vol.Any(str, [str]),
-                vol.Required("day"): vol.In(BatterySchedule.DAYS),
-                vol.Required("start_hour"): vol.All(vol.Coerce(int), vol.Range(min=0, max=23)),
-                vol.Required("start_minute"): vol.In([0, 30]),
-                vol.Required("duration"): vol.All(vol.Coerce(int), vol.Range(min=1, max=4)),
-                vol.Required("mode"): vol.In(["charge", "discharge"]),
+                probatio.Optional("entity_id"): probatio.Any(str, [str]),
+                probatio.Optional("device_id"): probatio.Any(str, [str]),
+                probatio.Required("day"): probatio.In(BatterySchedule.DAYS),
+                probatio.Required("start_hour"): probatio.All(probatio.Coerce(int), probatio.Range(min=0, max=23)),
+                probatio.Required("start_minute"): probatio.In([0, 30]),
+                probatio.Required("duration"): probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=4)),
+                probatio.Required("mode"): probatio.In(["charge", "discharge"]),
             }
         ),
     )
@@ -490,11 +490,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "clear_schedule",
         clear_schedule,
-        schema=vol.Schema(
+        schema=probatio.Schema(
             {
-                vol.Optional("entity_id"): vol.Any(str, [str]),
-                vol.Optional("device_id"): vol.Any(str, [str]),
-                vol.Required("day"): vol.In(["all"] + BatterySchedule.DAYS),
+                probatio.Optional("entity_id"): probatio.Any(str, [str]),
+                probatio.Optional("device_id"): probatio.Any(str, [str]),
+                probatio.Required("day"): probatio.In(["all"] + BatterySchedule.DAYS),
             }
         ),
     )
@@ -503,20 +503,20 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "set_meter_limit_power",
         set_meter_limit_power,
-        schema=vol.Schema(
+        schema=probatio.Schema(
             {
-                vol.Required("device_id"): vol.Any(str, [str]),
-                vol.Optional("entity_id"): vol.Any(str, [str]),
+                probatio.Required("device_id"): probatio.Any(str, [str]),
+                probatio.Optional("entity_id"): probatio.Any(str, [str]),
                 # UI selectors in services.yaml send strings; accept both and coerce to int.
-                vol.Required("abs"): vol.All(vol.Coerce(int), vol.In([0, 1])),
-                vol.Required("limitType"): vol.All(vol.Coerce(int), vol.In([0, 1])),
+                probatio.Required("abs"): probatio.All(probatio.Coerce(int), probatio.In([0, 1])),
+                probatio.Required("limitType"): probatio.All(probatio.Coerce(int), probatio.In([0, 1])),
                 # Actual upper bound depends on inverter `rate`; validated in the handler.
-                vol.Optional("target"): vol.All(vol.Coerce(int), vol.Range(min=0, max=50000)),
-                vol.Optional("targetPer"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
-                vol.Required("powerDiff"): vol.All(vol.Coerce(int), vol.Range(min=-1000, max=1000)),
-                vol.Required("lostTime"): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+                probatio.Optional("target"): probatio.All(probatio.Coerce(int), probatio.Range(min=0, max=50000)),
+                probatio.Optional("targetPer"): probatio.All(probatio.Coerce(int), probatio.Range(min=0, max=100)),
+                probatio.Required("powerDiff"): probatio.All(probatio.Coerce(int), probatio.Range(min=-1000, max=1000)),
+                probatio.Required("lostTime"): probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=60)),
                 # Actual upper bound depends on inverter `rate`; validated in the handler.
-                vol.Required("lostPowerMax"): vol.All(vol.Coerce(int), vol.Range(min=0, max=50000)),
+                probatio.Required("lostPowerMax"): probatio.All(probatio.Coerce(int), probatio.Range(min=0, max=50000)),
             }
         ),
     )
@@ -525,16 +525,16 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "set_meter_limit_current",
         set_meter_limit_current,
-        schema=vol.Schema(
+        schema=probatio.Schema(
             {
-                vol.Required("device_id"): vol.Any(str, [str]),
-                vol.Optional("entity_id"): vol.Any(str, [str]),
-                vol.Required("maxOutCurr"): vol.All(vol.Coerce(int), vol.Range(min=0, max=3000)),
-                vol.Required("maxInCurr"): vol.All(vol.Coerce(int), vol.Range(min=0, max=3000)),
-                vol.Required("currDiff"): vol.All(vol.Coerce(int), vol.Range(min=-10, max=10)),
-                vol.Required("lostTime"): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+                probatio.Required("device_id"): probatio.Any(str, [str]),
+                probatio.Optional("entity_id"): probatio.Any(str, [str]),
+                probatio.Required("maxOutCurr"): probatio.All(probatio.Coerce(int), probatio.Range(min=0, max=3000)),
+                probatio.Required("maxInCurr"): probatio.All(probatio.Coerce(int), probatio.Range(min=0, max=3000)),
+                probatio.Required("currDiff"): probatio.All(probatio.Coerce(int), probatio.Range(min=-10, max=10)),
+                probatio.Required("lostTime"): probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=60)),
                 # Actual upper bound depends on maxOutCurr; validated in the handler.
-                vol.Required("lostCurrMax"): vol.All(vol.Coerce(int), vol.Range(min=0, max=3000)),
+                probatio.Required("lostCurrMax"): probatio.All(probatio.Coerce(int), probatio.Range(min=0, max=3000)),
             }
         ),
     )
@@ -543,11 +543,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "set_meter_zero_power",
         set_meter_zero_power,
-        schema=vol.Schema(
+        schema=probatio.Schema(
             {
-                vol.Required("device_id"): vol.Any(str, [str]),
-                vol.Optional("entity_id"): vol.Any(str, [str]),
-                vol.Required("lostTime"): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+                probatio.Required("device_id"): probatio.Any(str, [str]),
+                probatio.Optional("entity_id"): probatio.Any(str, [str]),
+                probatio.Required("lostTime"): probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=60)),
             }
         ),
     )
@@ -556,10 +556,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "disable_meter_power_limit",
         disable_meter_power_limit,
-        schema=vol.Schema(
+        schema=probatio.Schema(
             {
-                vol.Required("device_id"): vol.Any(str, [str]),
-                vol.Optional("entity_id"): vol.Any(str, [str]),
+                probatio.Required("device_id"): probatio.Any(str, [str]),
+                probatio.Optional("entity_id"): probatio.Any(str, [str]),
             }
         ),
     )
@@ -568,15 +568,15 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "set_compatibility_meter_power_limit",
         set_compatibility_meter_power_limit,
-        schema=vol.Schema(
+        schema=probatio.Schema(
             {
-                vol.Required("device_id"): vol.Any(str, [str]),
-                vol.Optional("entity_id"): vol.Any(str, [str]),
-                vol.Required("enabled"): bool,
-                vol.Required("target_percentage"): vol.All(
-                    vol.Coerce(float), vol.Range(min=-1, max=10)
+                probatio.Required("device_id"): probatio.Any(str, [str]),
+                probatio.Optional("entity_id"): probatio.Any(str, [str]),
+                probatio.Required("enabled"): bool,
+                probatio.Required("target_percentage"): probatio.All(
+                    probatio.Coerce(float), probatio.Range(min=-1, max=10)
                 ),
-                vol.Required("fail_safe"): bool,
+                probatio.Required("fail_safe"): bool,
             }
         ),
     )

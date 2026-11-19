@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-import voluptuous as vol
+import probatio
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.solplanet import services
@@ -25,7 +25,7 @@ class FakeServiceRegistry:
 
     def __init__(self) -> None:
         self.handlers: dict[str, object] = {}
-        self.schemas: dict[str, vol.Schema] = {}
+        self.schemas: dict[str, probatio.Schema] = {}
 
     def async_register(self, domain, name, handler, *, schema) -> None:
         assert domain == DOMAIN
@@ -320,21 +320,21 @@ async def test_replace_schedule_day_schema_rejects_unsafe_values() -> None:
         ],
     }
     assert schema({**base, "pin": 150})["pin"] == 150
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(probatio.Invalid):
         schema({**base, "pin": 10001})
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(probatio.Invalid):
         schema({**base, "slots": [{**base["slots"][0], "start_hour": 8.5}]})
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(probatio.Invalid):
         schema({**base, "slots": [{**base["slots"][0], "start_minute": 15}]})
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(probatio.Invalid):
         schema({**base, "slots": [{**base["slots"][0], "start_minute": 0.5}]})
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(probatio.Invalid):
         schema({**base, "slots": base["slots"] * 7})
     coerced = schema({**base, "slots": [{**base["slots"][0], "start_hour": 8.0, "duration": "2"}]})
     assert coerced["slots"][0]["start_hour"] == 8
     assert coerced["slots"][0]["duration"] == 2
     for invalid in (True, "eight", None):
-        with pytest.raises(vol.Invalid):
+        with pytest.raises(probatio.Invalid):
             schema({**base, "slots": [{**base["slots"][0], "start_hour": invalid}]})
 
 
