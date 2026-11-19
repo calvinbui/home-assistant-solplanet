@@ -331,7 +331,7 @@ class ScheduleSlot:
     mode: str
 
     @classmethod
-    def from_raw(cls, code: int) -> "ScheduleSlot | None":
+    def from_raw(cls, code: int) -> ScheduleSlot | None:
         """Create slot from raw inverter code."""
         if code == 0:
             return None
@@ -349,7 +349,7 @@ class ScheduleSlot:
         )
 
     @classmethod
-    def from_time(cls, start: str, duration: int, mode: str) -> "ScheduleSlot":
+    def from_time(cls, start: str, duration: int, mode: str) -> ScheduleSlot:
         """Create slot from time string (HH:MM), duration and mode."""
         hour, minute = map(int, start.split(":"))
         if minute not in [0, 30]:
@@ -364,7 +364,7 @@ class ScheduleSlot:
         return cls(start_hour=hour, start_minute=minute, duration=duration, mode=mode)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ScheduleSlot":
+    def from_dict(cls, data: dict) -> ScheduleSlot:
         """Create slot from dictionary with start, duration, mode."""
         if isinstance(data.get("start"), str):
             return cls.from_time(data["start"], data["duration"], data["mode"])
@@ -424,7 +424,7 @@ class ScheduleSlot:
             )
 
     @staticmethod
-    def validate_slots(slots: list["ScheduleSlot"]) -> None:
+    def validate_slots(slots: list[ScheduleSlot]) -> None:
         """Validate a list of slots."""
         if len(slots) > 6:
             raise ValueError("Maximum 6 slots per day allowed")

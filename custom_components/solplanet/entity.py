@@ -110,7 +110,7 @@ class SolplanetEntity(CoordinatorEntity[SolplanetDataUpdateCoordinator], Entity)
             if isinstance(data, list):
                 try:
                     data = data[int(path_item)]
-                except (IndexError, TypeError, ValueError):
+                except IndexError, TypeError, ValueError:
                     return None
             elif hasattr(data, "__dict__"):
                 data = getattr(data, str(path_item), None)

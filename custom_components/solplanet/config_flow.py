@@ -112,7 +112,7 @@ def _host_is_ip_address(host: Any) -> bool:
     """Return whether a configured host is a literal IP address."""
     try:
         ip_address(host)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return False
     return True
 

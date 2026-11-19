@@ -49,7 +49,7 @@ class SolplanetApiAdapter:
         self._version: ApiVersion = "v2" if isinstance(api, SolplanetApiV2) else "v1"
 
     @classmethod
-    async def create(cls, client: SolplanetClient) -> "SolplanetApiAdapter":
+    async def create(cls, client: SolplanetClient) -> SolplanetApiAdapter:
         """Create adapter instance with automatic protocol version detection.
 
         Args:

@@ -107,7 +107,7 @@ def _power_limit_int(data: Any, field: str) -> int | None:
         return None
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
