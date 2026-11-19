@@ -269,7 +269,6 @@ class SolplanetConfigFlow(ConfigFlow, domain=DOMAIN):
                 data=self._discovered_data,
             )
 
-        self._set_confirm_only()
         return self.async_show_form(
             step_id="dhcp_confirm",
             description_placeholders={"host": self._discovered_data[CONF_HOST]},
