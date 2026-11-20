@@ -106,6 +106,22 @@ Use **SOC min** to keep part of the battery in reserve. For example, setting it 
 
 Use **SOC max** to limit the normal charging target. Do not use either value to override battery protection limits.
 
+## Change Mode And SOC Limits Together
+
+Work mode, SOC min and SOC max are stored together on the battery. When an automation changes more than one of them, use `solplanet.set_battery_config` instead of setting the entities one by one:
+
+```yaml
+action: solplanet.set_battery_config
+target:
+  entity_id: select.battery_work_mode
+data:
+  mode: Reserve power mode
+  soc_min: 10
+  soc_max: 95
+```
+
+Omitted fields keep their current value; SOC min must stay lower than SOC max once they are merged, so changing only one limit is checked against the other one stored on the battery and rejected before anything is written. The action sends one write with every requested field, so the inverter never runs an intermediate combination (for example, Reserve power mode with the previous SOC max). It then reads the battery configuration back, a few times with short pauses, and only succeeds once the battery reports the requested values; otherwise it raises an error you can handle in the automation. If the battery already matches, nothing is written. A write whose reply times out is still checked by the read-back, so a lost reply does not count as a failure when the change was applied.
+
 ## If A Schedule Does Not Work
 
 - Confirm **Custom mode** is still selected.

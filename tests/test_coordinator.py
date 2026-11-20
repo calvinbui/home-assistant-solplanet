@@ -3,20 +3,24 @@
 import asyncio
 from datetime import datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, call, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, call, patch
 
 import pytest
 from aiohttp import ClientResponseError
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.solplanet.client import (
+    BatteryConfigNotAppliedError,
     BatterySchedule,
+    BatteryWorkMode,
+    GetBatteryInfoResponse,
     GetInverterDataResponse,
     GetInverterInfoItemResponse,
     GetMeterDataResponse,
+    InvalidBatterySocRangeError,
     ScheduleSlot,
 )
 from custom_components.solplanet.const import (
@@ -71,6 +75,7 @@ def _api(version: str = "v2") -> SimpleNamespace:
         set_battery_work_mode=AsyncMock(),
         set_battery_soc_min=AsyncMock(),
         set_battery_soc_max=AsyncMock(),
+        set_battery_config=AsyncMock(),
         set_schedule_slots=AsyncMock(),
         set_schedule_power=AsyncMock(),
         set_schedule_pin=AsyncMock(),
@@ -1682,3 +1687,70 @@ async def test_native_grid_status_resets_failure_history_without_known_address()
     assert not coordinator._grid_status_failures
     assert not coordinator._grid_status_retry_after
     api.get_grid_status.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_set_battery_config_stores_verified_read_back() -> None:
+    """The verified configuration updates only this battery, without a metadata refresh."""
+    _, api, runtime, coordinator = _base_coordinator()
+    runtime.data[BATTERY_IDENTIFIER]["bat"] = {"info": None, "work_modes": {"all": [], "selected": None}}
+    runtime.coordinator.async_update_listeners = MagicMock()
+    verified = GetBatteryInfoResponse(type=1, mod_r=3, discharge_max=10, charge_max=95, muf=3, mod=4, num=1)
+    api.set_battery_config.return_value = verified
+
+    await coordinator.set_battery_config("bat", mode=BatteryWorkMode("Reserve power mode", 3, 1), soc_max=95)
+
+    api.set_battery_config.assert_awaited_once_with(
+        "bat", mode=BatteryWorkMode("Reserve power mode", 3, 1), soc_min=None, soc_max=95
+    )
+    entry = runtime.data[BATTERY_IDENTIFIER]["bat"]
+    assert entry["info"] is verified
+    assert entry["work_modes"]["selected"] == BatteryWorkMode("Reserve power mode", 3, 1)
+    runtime.coordinator.async_update_listeners.assert_called_once()
+    runtime.coordinator.async_request_refresh.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_set_battery_config_ignores_unknown_battery() -> None:
+    """A verified configuration for a battery not in the metadata is not stored."""
+    _, api, runtime, coordinator = _base_coordinator()
+    runtime.data[BATTERY_IDENTIFIER].pop("unknown", None)
+    runtime.coordinator.async_update_listeners = MagicMock()
+    api.set_battery_config.return_value = GetBatteryInfoResponse(
+        type=1, mod_r=2, discharge_max=10, charge_max=100, muf=3, mod=4, num=1
+    )
+
+    await coordinator.set_battery_config("unknown", soc_min=10)
+
+    assert "unknown" not in runtime.data[BATTERY_IDENTIFIER]
+    runtime.coordinator.async_update_listeners.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_set_battery_config_maps_errors() -> None:
+    """V1, inverted SOC ranges, unverified writes and other failures surface as translated errors."""
+    _, api, _runtime, coordinator = _base_coordinator()
+
+    api.set_battery_config.side_effect = NotImplementedError
+    with pytest.raises(HomeAssistantError) as exc_info:
+        await coordinator.set_battery_config("bat", soc_max=95)
+    _assert_translated_exception(exc_info.value, "battery_operation_unsupported_v1")
+
+    api.set_battery_config.side_effect = InvalidBatterySocRangeError(95, 90)
+    with pytest.raises(ServiceValidationError) as exc_info:
+        await coordinator.set_battery_config("bat", soc_min=95)
+    _assert_translated_exception(
+        exc_info.value, "battery_soc_range_invalid", {"soc_min": "95", "soc_max": "90"}
+    )
+
+    api.set_battery_config.side_effect = BatteryConfigNotAppliedError((1, 2, 10, 95), None, TimeoutError())
+    with pytest.raises(HomeAssistantError) as exc_info:
+        await coordinator.set_battery_config("bat", soc_max=95)
+    _assert_translated_exception(
+        exc_info.value, "battery_config_not_applied", {"expected": "(1, 2, 10, 95)", "actual": "None"}
+    )
+
+    api.set_battery_config.side_effect = RuntimeError("offline")
+    with pytest.raises(HomeAssistantError) as exc_info:
+        await coordinator.set_battery_config("bat", soc_max=95)
+    _assert_translated_exception(exc_info.value, "battery_operation_failed", {"error": "offline"})

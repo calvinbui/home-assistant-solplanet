@@ -143,6 +143,7 @@ class FakeCoordinator:
             "set_battery_schedule_pout",
             "set_battery_led_brightness",
             "set_battery_work_mode",
+            "set_battery_config",
             "set_battery_led_color_index",
             "set_inverter_power",
             "set_battery_power",

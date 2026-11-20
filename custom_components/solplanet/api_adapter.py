@@ -206,6 +206,21 @@ class SolplanetApiAdapter:
         """
         await self._v2_api().set_battery_soc_max(sn, soc_max)
 
+    async def set_battery_config(
+        self,
+        sn: str,
+        *,
+        mode: BatteryWorkMode | None = None,
+        soc_min: int | None = None,
+        soc_max: int | None = None,
+    ) -> GetBatteryInfoResponse:
+        """Set work mode and SOC limits in one write and return the verified configuration.
+
+        Raises:
+            NotImplementedError: If battery operations are not supported (V1 protocol)
+        """
+        return await self._v2_api().set_battery_config(sn, mode=mode, soc_min=soc_min, soc_max=soc_max)
+
     async def get_schedule(self) -> dict:
         """Get battery schedule configuration.
 

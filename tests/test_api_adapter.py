@@ -204,3 +204,16 @@ async def test_modbus_multiple_write_uses_named_parameters() -> None:
         values=[1, 2],
         dry_run=True,
     )
+
+
+async def test_set_battery_config_delegates_and_rejects_v1() -> None:
+    """The combined battery write is V2-only and forwards keyword arguments."""
+    adapter, api = _adapter("v2")
+    api.set_battery_config = AsyncMock(return_value=True)
+    mode = BatteryWorkMode("Reserve power mode", 3, 1)
+    assert await adapter.set_battery_config("BAT", mode=mode, soc_max=95) is True
+    api.set_battery_config.assert_awaited_once_with("BAT", mode=mode, soc_min=None, soc_max=95)
+
+    adapter, _ = _adapter("v1")
+    with pytest.raises(NotImplementedError, match="not supported in V1"):
+        await adapter.set_battery_config("BAT", soc_min=10)

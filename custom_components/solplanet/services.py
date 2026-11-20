@@ -10,7 +10,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
-from .client import BatterySchedule, ScheduleSlot
+from .client import BatterySchedule, BatteryWorkModes, ScheduleSlot
 from .const import BATTERY_IDENTIFIER, DOMAIN, METER_IDENTIFIER
 from .coordinator import error_detail
 
@@ -180,6 +180,47 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     pout=call.data.get("pout"),
                 )
                 processed = True
+
+        if not processed:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="battery_coordinator_not_found",
+                translation_placeholders={"identifiers": ", ".join(sorted(isns))},
+            )
+
+    async def set_battery_config(call: ServiceCall) -> None:
+        """Set work mode and SOC limits with a single gateway write."""
+        mode_name = call.data.get("mode")
+        soc_min = call.data.get("soc_min")
+        soc_max = call.data.get("soc_max")
+        if mode_name is None and soc_min is None and soc_max is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="battery_config_empty",
+            )
+        if soc_min is not None and soc_max is not None and soc_min >= soc_max:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="battery_soc_range_invalid",
+                translation_placeholders={"soc_min": str(soc_min), "soc_max": str(soc_max)},
+            )
+        mode = BatteryWorkModes.by_name(mode_name) if mode_name is not None else None
+
+        target = _build_target(call)
+        isns = await get_isn_from_target(hass, target)
+        if not isns:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="no_valid_battery_targets",
+            )
+
+        processed = False
+        for runtime in hass.data[DOMAIN].values():
+            coordinator = runtime.coordinator
+            for isn in isns:
+                if isn in coordinator.data[BATTERY_IDENTIFIER]:
+                    await coordinator.set_battery_config(isn, mode=mode, soc_min=soc_min, soc_max=soc_max)
+                    processed = True
 
         if not processed:
             raise ServiceValidationError(
@@ -467,6 +508,25 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 ),
                 probatio.Optional("pin"): _SCHEDULE_POWER_SCHEMA,
                 probatio.Optional("pout"): _SCHEDULE_POWER_SCHEMA,
+            }
+        ),
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        "set_battery_config",
+        set_battery_config,
+        schema=probatio.Schema(
+            {
+                probatio.Optional("entity_id"): probatio.Any(str, [str]),
+                probatio.Optional("device_id"): probatio.Any(str, [str]),
+                probatio.Optional("mode"): probatio.In(BatteryWorkModes.names()),
+                probatio.Optional("soc_min"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=5, max=100)
+                ),
+                probatio.Optional("soc_max"): probatio.All(
+                    probatio.Coerce(int), probatio.Range(min=10, max=100)
+                ),
             }
         ),
     )
