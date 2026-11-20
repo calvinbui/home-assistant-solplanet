@@ -318,10 +318,11 @@ async def test_base_coordinator_helpers_and_update_contract() -> None:
     )
 
 
+@pytest.mark.parametrize("version", ["v1", "v2"])
 @pytest.mark.asyncio
-async def test_update_failure_names_bare_exceptions() -> None:
+async def test_update_failure_names_bare_exceptions(version: str) -> None:
     """A bare exception with empty str (e.g. TimeoutError) still logs its type."""
-    _, _, _, coordinator = _base_coordinator()
+    _, _, _, coordinator = _base_coordinator(version=version)
     coordinator._async_update_runtime_data = AsyncMock(side_effect=TimeoutError())
 
     with pytest.raises(UpdateFailed) as exc_info:
