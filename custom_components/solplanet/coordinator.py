@@ -194,7 +194,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
                     translation_key="update_failed",
                     translation_placeholders={
                         "source": self._source_name,
-                        "error": str(err),
+                        "error": str(err) or type(err).__name__,
                     },
                 ) from err
 
