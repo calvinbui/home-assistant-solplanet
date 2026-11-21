@@ -205,6 +205,52 @@ async def test_http_exhausts_retries(kind: str, expected: type[Exception]) -> No
         await client.get("invinfo.cgi")
 
 
+@pytest.mark.parametrize("method", ["GET", "POST"])
+@pytest.mark.parametrize("retries, timeout", [(0, 15.0), (2, 2.5)])
+async def test_http_bare_timeout_includes_request_context(method: str, retries: int, timeout: float) -> None:
+    """An exhausted bare timeout reports the request and configured retry budget."""
+    failures = [TimeoutError() for _ in range(retries + 1)]
+    session = _Session(*failures)
+    client = SolplanetClient("1.2.3.4", session, request_timeout=timeout, request_retries=retries)  # type: ignore[arg-type]
+    with (
+        patch("custom_components.solplanet.client.asyncio.sleep", new=AsyncMock()) as sleep,
+        pytest.raises(TimeoutError) as exc_info,
+    ):
+        if method == "GET":
+            await client.get("invinfo.cgi")
+        else:
+            await client.post("invinfo.cgi", {"action": "test"})
+
+    assert str(exc_info.value) == (
+        f"{method} http://1.2.3.4:8484/invinfo.cgi timed out after {retries + 1} attempt(s) of {timeout:g}s"
+    )
+    assert exc_info.value.__cause__ is failures[-1]
+    assert [call[:2] for call in session.calls] == [(method, "http://1.2.3.4:8484/invinfo.cgi")] * (
+        retries + 1
+    )
+    assert [call.args for call in sleep.await_args_list] == [
+        (0.25 * (attempt + 1),) for attempt in range(retries)
+    ]
+
+
+async def test_http_message_bearing_timeout_is_preserved() -> None:
+    """An existing timeout detail and exception identity survive exhausted retries."""
+    failure = TimeoutError("gateway read timed out")
+    session = _Session(TimeoutError(), failure)
+    client = SolplanetClient("1.2.3.4", session, request_retries=1)  # type: ignore[arg-type]
+    with (
+        patch("custom_components.solplanet.client.asyncio.sleep", new=AsyncMock()) as sleep,
+        pytest.raises(TimeoutError) as exc_info,
+    ):
+        await client.get("invinfo.cgi")
+
+    assert exc_info.value is failure
+    assert str(exc_info.value) == "gateway read timed out"
+    assert exc_info.value.__cause__ is None
+    assert len(session.calls) == 2
+    sleep.assert_awaited_once_with(0.25)
+
+
 async def test_http_rejects_unsupported_method() -> None:
     """Only GET and POST are accepted by the internal transport."""
     client = SolplanetClient("1.2.3.4", _Session())  # type: ignore[arg-type]

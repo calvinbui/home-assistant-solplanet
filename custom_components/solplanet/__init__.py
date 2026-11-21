@@ -37,6 +37,7 @@ from .coordinator import (
     SolplanetMetadataUpdateCoordinator,
     SolplanetMeterUpdateCoordinator,
     SolplanetRuntimeData,
+    error_detail,
 )
 from .services import async_setup_services
 from .validation import normalize_mac_address
@@ -283,7 +284,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SolplanetConfigEntry) ->
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
             translation_key="protocol_detection_failed",
-            translation_placeholders={"error": str(err)},
+            translation_placeholders={"error": error_detail(err)},
         ) from err
 
     _LOGGER.info("Using Solplanet protocol version: %s", api.version)

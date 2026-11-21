@@ -44,6 +44,12 @@ from .validation import (
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def error_detail(err: Exception) -> str:
+    """Return a non-empty detail for an exception, even when str(err) is empty."""
+    return str(err) or type(err).__name__
+
+
 METADATA_UPDATE_INTERVAL = timedelta(hours=1)
 FAILED_UPDATE_INTERVAL = timedelta(minutes=10)
 MAX_FAILED_UPDATES = 3
@@ -194,7 +200,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
                     translation_key="update_failed",
                     translation_placeholders={
                         "source": self._source_name,
-                        "error": str(err),
+                        "error": error_detail(err),
                     },
                 ) from err
 
@@ -229,7 +235,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="inverter_power_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
     async def dongle_sync_time(self) -> None:
@@ -255,7 +261,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="sync_time_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
     async def dongle_reboot(self) -> None:
@@ -279,7 +285,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="reboot_dongle_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
     async def set_meter_power_limit(self, payload: dict) -> None:
@@ -310,13 +316,13 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="set_meter_power_limit_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
         except Exception as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="set_meter_power_limit_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
         # Expected success response:
@@ -348,7 +354,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="set_meter_power_limit_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
         if not isinstance(rsp, dict) or rsp.get("dat") != "ok":
@@ -379,7 +385,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="battery_operation_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
     async def set_battery_power(self, on: bool) -> None:
@@ -413,7 +419,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="battery_operation_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
     async def set_battery_soc_min(self, sn: str, value: int) -> None:
@@ -431,7 +437,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="battery_operation_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
     async def set_battery_soc_max(self, sn: str, value: int) -> None:
@@ -449,7 +455,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="battery_operation_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
     async def set_battery_schedule_slots(self, sn: str, slots: dict[str, list[ScheduleSlot]]) -> None:
@@ -475,7 +481,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="battery_operation_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
     async def replace_battery_schedule_day(
@@ -517,7 +523,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="battery_operation_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
     async def set_battery_schedule_power(self, pin: int | None = None, pout: int | None = None) -> None:
@@ -535,7 +541,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="battery_operation_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
     async def set_battery_schedule_pin(self, sn: str, pin: int) -> None:
@@ -553,7 +559,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="battery_operation_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
     async def set_battery_schedule_pout(self, sn: str, pout: int) -> None:
@@ -571,7 +577,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="battery_operation_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
 

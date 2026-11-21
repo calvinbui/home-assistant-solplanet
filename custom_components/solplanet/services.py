@@ -12,6 +12,7 @@ from homeassistant.helpers import entity_registry as er
 
 from .client import BatterySchedule, ScheduleSlot
 from .const import BATTERY_IDENTIFIER, DOMAIN, METER_IDENTIFIER
+from .coordinator import error_detail
 
 type ServiceTarget = Mapping[str, str | list[str]]
 type MeterPayload = dict[str, int]
@@ -153,7 +154,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="invalid_schedule",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
 
         processed = False
@@ -243,14 +244,14 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                         raise ServiceValidationError(
                             translation_domain=DOMAIN,
                             translation_key="invalid_schedule",
-                            translation_placeholders={"error": str(err)},
+                            translation_placeholders={"error": error_detail(err)},
                         ) from err
                     except (KeyError, ConnectionError, TimeoutError) as err:
                         # Handle specific API/network errors
                         raise HomeAssistantError(
                             translation_domain=DOMAIN,
                             translation_key="communication_error",
-                            translation_placeholders={"error": str(err)},
+                            translation_placeholders={"error": error_detail(err)},
                         ) from err
 
         if not processed:
