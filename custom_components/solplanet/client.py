@@ -99,6 +99,10 @@ class SolplanetClient:
             except (TimeoutError, ClientError, json.JSONDecodeError) as err:
                 last_err = err
                 if attempt >= self.request_retries:
+                    if isinstance(err, TimeoutError) and not str(err):
+                        raise TimeoutError(
+                            f"{method} {url} timed out after {attempt + 1} attempt(s) of {self.request_timeout:g}s"
+                        ) from err
                     raise
                 # Small backoff to avoid hammering the dongle.
                 await asyncio.sleep(0.25 * (attempt + 1))

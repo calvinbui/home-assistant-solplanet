@@ -396,19 +396,21 @@ async def test_set_schedule_slots_updates_copy_and_validates_failures() -> None:
         await handler(_schedule_call(start_hour=12))
     _assert_translated_exception(exc_info.value, "schedule_slot_limit")
 
-    coordinator.set_battery_schedule_slots.side_effect = ConnectionError("offline")
     original_slots["Mon"] = []
-    with (
-        patch.object(services, "get_isn_from_target", AsyncMock(return_value=["bat-1"])),
-        pytest.raises(HomeAssistantError) as exc_info,
-    ):
-        await handler(_schedule_call())
-    assert not isinstance(exc_info.value, ServiceValidationError)
-    _assert_translated_exception(
-        exc_info.value,
-        "communication_error",
-        {"error": "offline"},
-    )
+    for failure, detail in [(ConnectionError("offline"), "offline"), (TimeoutError(), "TimeoutError")]:
+        coordinator.set_battery_schedule_slots.side_effect = failure
+        with (
+            patch.object(services, "get_isn_from_target", AsyncMock(return_value=["bat-1"])),
+            pytest.raises(HomeAssistantError) as exc_info,
+        ):
+            await handler(_schedule_call())
+        assert not isinstance(exc_info.value, ServiceValidationError)
+        _assert_translated_exception(
+            exc_info.value,
+            "communication_error",
+            {"error": detail},
+        )
+        assert original_slots["Mon"] == []
 
 
 async def test_clear_schedule_handles_day_all_missing_and_unmatched_targets() -> None:
