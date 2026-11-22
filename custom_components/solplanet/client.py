@@ -15,7 +15,7 @@ import time
 from dataclasses import asdict, dataclass, fields, is_dataclass
 from typing import Any, ClassVar, cast
 
-from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout
+from aiohttp import ClientError, ClientResponse, ClientResponseError, ClientSession, ClientTimeout
 
 from .modbus import DataType, ModbusResponse, ModbusRtuFrameGenerator
 
@@ -24,6 +24,54 @@ __copyright__ = "Zbigniew Motyka"
 __license__ = "MIT"
 
 _LOGGER = logging.getLogger(__name__)
+
+# Pause before the single read-back that verifies a battery configuration write,
+# giving the inverter a moment to apply it.
+BATTERY_CONFIG_VERIFY_DELAY = 2.0
+
+BatteryConfigKey = tuple[int | None, int | None, int | None, int | None]
+
+
+def format_battery_config(config: BatteryConfigKey) -> str:
+    """Describe a battery configuration as labelled values, e.g. ``soc_max=95``."""
+    return " ".join(
+        f"{label}={value}"
+        for label, value in zip(("type", "mod_r", "soc_min", "soc_max"), config, strict=True)
+    )
+
+
+class BatteryConfigNotAppliedError(Exception):
+    """The battery did not report the requested configuration after a write."""
+
+    def __init__(
+        self,
+        expected: BatteryConfigKey,
+        actual: GetBatteryInfoResponse,
+        write_error: Exception | None,
+    ) -> None:
+        """Store what was requested, what was read back and any write error."""
+        self.expected = expected
+        self.actual = _battery_config_key(actual)
+        self.write_error = write_error
+        super().__init__(
+            f"expected {format_battery_config(expected)}, read {format_battery_config(self.actual)}"
+            + (f" (write error: {write_error})" if write_error else "")
+        )
+
+
+class InvalidBatterySocRangeError(ValueError):
+    """The resulting SOC min would not be lower than the resulting SOC max."""
+
+    def __init__(self, soc_min: int | None, soc_max: int | None) -> None:
+        """Store the SOC limits the write would have produced."""
+        self.soc_min = soc_min
+        self.soc_max = soc_max
+        super().__init__(f"SOC min {soc_min} must be lower than SOC max {soc_max}")
+
+
+def _battery_config_key(info: GetBatteryInfoResponse) -> BatteryConfigKey:
+    """Return the fields written by a battery configuration request."""
+    return (info.type, info.mod_r, info.discharge_max, info.charge_max)
 
 
 # ============================================================================
@@ -312,6 +360,16 @@ class BatteryWorkModes:
             )
 
         return result
+
+    @classmethod
+    def names(cls) -> list[str]:
+        """Return the names of all known battery work modes."""
+        return [mode.name for mode in cls._battery_modes]
+
+    @classmethod
+    def by_name(cls, name: str) -> BatteryWorkMode | None:
+        """Return the known battery work mode with the given name."""
+        return next((mode for mode in cls._battery_modes if mode.name == name), None)
 
     def get_mode(self, battery_type: int, mod_r: int) -> BatteryWorkMode | None:
         """Get battery work mode by type and mod_r."""
@@ -1070,59 +1128,85 @@ class SolplanetApiV2(ModbusApiMixin):
             )
         return self._create_class_from_dict(GetBatteryInfoResponse, response)
 
-    async def set_battery_work_mode(self, sn: str, mode: BatteryWorkMode) -> None:
-        """Set battery work mode."""
-        _LOGGER.debug("Setting battery (%s) work mode to %s", sn, mode)
-        battery_info = await self.get_battery_info(sn)
-        request = SetBatteryConfigRequest(
-            value=SetBatteryConfigValueRequest(
-                type=mode.type,
-                mod_r=mode.mod_r,
-                sn=sn,
-                discharge_max=battery_info.discharge_max,
-                charge_max=battery_info.charge_max,
-                muf=battery_info.muf,
-                mod=battery_info.mod,
-                num=battery_info.num,
-            )
-        )
-        await self.client.post("setting.cgi", request)
+    async def set_battery_config(
+        self,
+        sn: str,
+        *,
+        mode: BatteryWorkMode | None = None,
+        soc_min: int | None = None,
+        soc_max: int | None = None,
+    ) -> GetBatteryInfoResponse:
+        """Write work mode and SOC limits together and verify them by reading back.
 
-    async def set_battery_soc_min(self, sn: str, soc_min: int) -> None:
-        """Set battery minimum SOC."""
-        _LOGGER.debug("Setting battery (%s) SOC min to %d", sn, soc_min)
-        battery_info = await self.get_battery_info(sn)
-        request = SetBatteryConfigRequest(
-            value=SetBatteryConfigValueRequest(
-                type=battery_info.type,
-                mod_r=battery_info.mod_r,
-                sn=sn,
-                discharge_max=soc_min,
-                charge_max=battery_info.charge_max,
-                muf=battery_info.muf,
-                mod=battery_info.mod,
-                num=battery_info.num,
-            )
-        )
-        await self.client.post("setting.cgi", request)
+        Work mode, SOC min and SOC max share one `setbattery` request that always
+        carries the full battery configuration, so they are written together and
+        the inverter never sees an intermediate combination. The write is then
+        confirmed by re-reading only the battery configuration once, after a short
+        pause because the inverter may take a moment to apply it. A write whose
+        reply is lost (timeout, dropped connection, unreadable body) is still
+        verified, since the read-back tells whether it applied; an HTTP error
+        status fails straight away. Nothing is written when the battery already
+        matches.
 
-    async def set_battery_soc_max(self, sn: str, soc_max: int) -> None:
-        """Set battery maximum SOC."""
-        _LOGGER.debug("Setting battery (%s) SOC max to %d", sn, soc_max)
+        Returns the verified battery configuration.
+
+        Raises:
+            InvalidBatterySocRangeError: SOC min would not be lower than SOC max once
+                the request is merged with the current configuration.
+            BatteryConfigNotAppliedError: The read-back did not match the request.
+        """
         battery_info = await self.get_battery_info(sn)
+        target = (
+            mode.type if mode is not None else battery_info.type,
+            mode.mod_r if mode is not None else battery_info.mod_r,
+            soc_min if soc_min is not None else battery_info.discharge_max,
+            soc_max if soc_max is not None else battery_info.charge_max,
+        )
+        # A partial request is merged with the limits read from the battery, so the
+        # range can only be checked here.
+        if target[2] is not None and target[3] is not None and target[2] >= target[3]:
+            raise InvalidBatterySocRangeError(target[2], target[3])
+        if _battery_config_key(battery_info) == target:
+            _LOGGER.debug("Battery (%s) configuration already up to date", sn)
+            return battery_info
+
+        battery_type, mod_r, discharge_max, charge_max = target
+        _LOGGER.debug(
+            "Setting battery (%s) type=%s mod_r=%s soc_min=%s soc_max=%s",
+            sn,
+            battery_type,
+            mod_r,
+            discharge_max,
+            charge_max,
+        )
         request = SetBatteryConfigRequest(
             value=SetBatteryConfigValueRequest(
-                type=battery_info.type,
-                mod_r=battery_info.mod_r,
+                type=battery_type,
+                mod_r=mod_r,
                 sn=sn,
-                discharge_max=battery_info.discharge_max,
-                charge_max=soc_max,
+                discharge_max=discharge_max,
+                charge_max=charge_max,
                 muf=battery_info.muf,
                 mod=battery_info.mod,
                 num=battery_info.num,
             )
         )
-        await self.client.post("setting.cgi", request)
+        write_error: Exception | None = None
+        try:
+            await self.client.post("setting.cgi", request)
+        except ClientResponseError:
+            # The dongle answered and rejected the write: nothing to verify.
+            raise
+        except (TimeoutError, ClientError, json.JSONDecodeError) as err:
+            # The dongle may have applied the write before the reply was lost.
+            _LOGGER.debug("Battery (%s) write got no valid reply (%s); verifying by read-back", sn, err)
+            write_error = err
+
+        await asyncio.sleep(BATTERY_CONFIG_VERIFY_DELAY)
+        read_back = await self.get_battery_info(sn)
+        if _battery_config_key(read_back) != target:
+            raise BatteryConfigNotAppliedError(target, read_back, write_error)
+        return read_back
 
     async def get_schedule(self) -> dict:
         """Get battery schedule configuration."""

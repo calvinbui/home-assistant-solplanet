@@ -1,3 +1,45 @@
+set_battery_config:
+  name: Set Battery Configuration
+  description: Set work mode and SOC limits in a single write. Omitted fields keep their current value; nothing is written if the battery already matches.
+  target:
+    entity:
+      integration: solplanet
+  fields:
+    mode:
+      name: Work Mode
+      description: Battery work mode
+      required: false
+      selector:
+        select:
+          options:
+            - "Self-consumption mode"
+            - "Reserve power mode"
+            - "Custom mode"
+            - "Off-grid mode"
+            - "Time of use mode"
+    soc_min:
+      name: Minimum SOC
+      description: Minimum state of charge (%)
+      required: false
+      selector:
+        number:
+          min: 5
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+          mode: box
+    soc_max:
+      name: Maximum SOC
+      description: Maximum state of charge (%)
+      required: false
+      selector:
+        number:
+          min: 10
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+          mode: box
+
 replace_schedule_day:
   name: Replace Schedule Day
   description: Replace all slots for one day in one schedule write. Other days are read from the inverter immediately before the write.

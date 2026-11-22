@@ -60,6 +60,12 @@
     "absolute_power_target_required": {
       "message": "Target power is required when using an absolute power limit."
     },
+    "battery_config_empty": {
+      "message": "At least one of mode, soc_min or soc_max is required."
+    },
+    "battery_config_not_applied": {
+      "message": "The battery did not report the requested configuration after the write (expected {expected}, read {actual})."
+    },
     "battery_coordinator_not_found": {
       "message": "No battery coordinator was found for: {identifiers}"
     },
@@ -68,6 +74,9 @@
     },
     "battery_operation_unsupported_v1": {
       "message": "Battery operations are not supported with the V1 protocol."
+    },
+    "battery_soc_range_invalid": {
+      "message": "Minimum SOC ({soc_min} %) must be lower than maximum SOC ({soc_max} %)."
     },
     "communication_error": {
       "message": "Communication with the inverter failed: {error}"

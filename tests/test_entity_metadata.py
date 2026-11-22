@@ -103,9 +103,12 @@ def test_exception_translation_catalogs_are_complete() -> None:
     assert english == strings
     assert set(strings) == {
         "absolute_power_target_required",
+        "battery_config_empty",
+        "battery_config_not_applied",
         "battery_coordinator_not_found",
         "battery_operation_failed",
         "battery_operation_unsupported_v1",
+        "battery_soc_range_invalid",
         "communication_error",
         "dongle_operation_unsupported_v1",
         "invalid_schedule",

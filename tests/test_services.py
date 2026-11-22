@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import probatio
 import pytest
+import yaml
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.solplanet import services
-from custom_components.solplanet.client import BatterySchedule, ScheduleSlot
+from custom_components.solplanet.client import BatterySchedule, BatteryWorkModes, ScheduleSlot
 from custom_components.solplanet.const import (
     BATTERY_IDENTIFIER,
     DOMAIN,
@@ -159,6 +161,7 @@ async def _setup_services(coordinator: FakeCoordinator | object | None = None):
     assert set(registry.handlers) == {
         "set_schedule_slots",
         "replace_schedule_day",
+        "set_battery_config",
         "clear_schedule",
         "set_meter_limit_power",
         "set_meter_limit_current",
@@ -638,3 +641,69 @@ async def test_compatibility_meter_power_handler_builds_setmeter_payload() -> No
         assert payload["regulate"] == 5
         assert payload["target"] == -50
         assert payload["com_interruption_enable_g100"] == 1
+
+
+async def test_set_battery_config_forwards_mode_and_limits() -> None:
+    """The combined service resolves the mode by name and writes once per battery."""
+    _hass, registry, coordinator = await _setup_services()
+    handler = registry.handlers["set_battery_config"]
+    call = _call(device_id="battery-device", mode="Reserve power mode", soc_min=10, soc_max=95)
+
+    with patch.object(services, "get_isn_from_target", AsyncMock(return_value=["bat-1"])):
+        await handler(call)
+
+    coordinator.set_battery_config.assert_awaited_once_with(
+        "bat-1",
+        mode=BatteryWorkModes.by_name("Reserve power mode"),
+        soc_min=10,
+        soc_max=95,
+    )
+
+
+async def test_set_battery_config_validates_before_writing() -> None:
+    """Empty requests, inverted limits and unknown targets never reach the gateway."""
+    _hass, registry, coordinator = await _setup_services()
+    handler = registry.handlers["set_battery_config"]
+
+    with pytest.raises(ServiceValidationError) as exc_info:
+        await handler(_call(device_id="battery-device"))
+    _assert_translated_exception(exc_info.value, "battery_config_empty")
+
+    with pytest.raises(ServiceValidationError) as exc_info:
+        await handler(_call(device_id="battery-device", soc_min=90, soc_max=90))
+    _assert_translated_exception(
+        exc_info.value, "battery_soc_range_invalid", {"soc_min": "90", "soc_max": "90"}
+    )
+
+    with (
+        patch.object(services, "get_isn_from_target", AsyncMock(return_value=[])),
+        pytest.raises(ServiceValidationError) as exc_info,
+    ):
+        await handler(_call(device_id="battery-device", soc_max=95))
+    _assert_translated_exception(exc_info.value, "no_valid_battery_targets")
+
+    with (
+        patch.object(services, "get_isn_from_target", AsyncMock(return_value=["missing"])),
+        pytest.raises(ServiceValidationError) as exc_info,
+    ):
+        await handler(_call(device_id="battery-device", soc_max=95))
+    _assert_translated_exception(exc_info.value, "battery_coordinator_not_found", {"identifiers": "missing"})
+    coordinator.set_battery_config.assert_not_awaited()
+
+
+async def test_set_battery_config_schema_bounds() -> None:
+    """The schema accepts known modes and bounded integer SOC values only."""
+    _hass, registry, _coordinator = await _setup_services()
+    schema = registry.schemas["set_battery_config"]
+    assert schema({"mode": "Custom mode", "soc_max": "95"})["soc_max"] == 95
+    for invalid in ({"mode": "Turbo"}, {"soc_min": 4}, {"soc_max": 101}, {"soc_max": 9}):
+        with pytest.raises(probatio.Invalid):
+            schema(invalid)
+
+
+def test_set_battery_config_mode_options_match_work_modes() -> None:
+    """The action's mode selector offers exactly the known battery work modes."""
+    services_yaml = Path(services.__file__).with_name("services.yaml")
+    definition = yaml.safe_load(services_yaml.read_text(encoding="utf-8"))
+    options = definition["set_battery_config"]["fields"]["mode"]["selector"]["select"]["options"]
+    assert options == BatteryWorkModes.names()

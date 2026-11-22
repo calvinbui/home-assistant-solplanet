@@ -144,7 +144,7 @@ def create_battery_entities_description(
                 SolplanetSelectOption(label=x.name, value=x)
                 for x in coordinator.data[BATTERY_IDENTIFIER][isn]["work_modes"]["all"]
             ],
-            callback=lambda option: coordinator.set_battery_work_mode(isn, option.value),
+            callback=lambda option: coordinator.set_battery_config(isn, mode=option.value),
         ),
     ]
 

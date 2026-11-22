@@ -137,12 +137,10 @@ class FakeCoordinator:
         for method in (
             "dongle_sync_time",
             "dongle_reboot",
-            "set_battery_soc_max",
-            "set_battery_soc_min",
             "set_battery_schedule_pin",
             "set_battery_schedule_pout",
             "set_battery_led_brightness",
-            "set_battery_work_mode",
+            "set_battery_config",
             "set_battery_led_color_index",
             "set_inverter_power",
             "set_battery_power",

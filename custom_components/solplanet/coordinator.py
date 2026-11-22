@@ -12,19 +12,22 @@ from typing import Any, TypeGuard, cast, override
 from aiohttp import ClientResponseError
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .api_adapter import SolplanetApiAdapter
 from .client import (
+    BatteryConfigNotAppliedError,
     BatterySchedule,
     BatteryWorkMode,
     BatteryWorkModes,
     GetBatteryInfoResponse,
     GetInverterDataResponse,
+    InvalidBatterySocRangeError,
     ScheduleSlot,
+    format_battery_config,
 )
 from .const import (
     BATTERY_IDENTIFIER,
@@ -122,6 +125,21 @@ class SolplanetRuntimeData:
             coordinator = self.dongle_coordinator
 
         return coordinator or self.coordinator
+
+    def store_battery_info(self, sn: str, info: GetBatteryInfoResponse) -> None:
+        """Store a verified battery configuration and notify its entities."""
+        batteries = self.data.get(BATTERY_IDENTIFIER, {})
+        if sn not in batteries:
+            return
+        entry = dict(batteries[sn])
+        entry["info"] = info
+        modes = BatteryWorkModes()
+        entry["work_modes"] = {
+            "all": modes.get_all_modes(info.type, info.mod_r),
+            "selected": modes.get_mode(info.type, info.mod_r),
+        }
+        batteries[sn] = entry
+        self.coordinator.async_update_listeners()
 
     async def async_request_metadata_refresh(self) -> None:
         """Refresh settings and metadata after a write."""
@@ -404,34 +422,44 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
         """Set battery LED brightness percent (offset 1503)."""
         await self._write_battery_more_setting(register_offset=1503, value=int(brightness))
 
-    async def set_battery_work_mode(self, sn: str, mode: BatteryWorkMode) -> None:
-        """Set battery work mode."""
-        try:
-            async with self.runtime.coordinator_lock:
-                await self.__api.set_battery_work_mode(sn, mode)
-            await self.runtime.async_request_metadata_refresh()
-        except NotImplementedError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="battery_operation_unsupported_v1",
-            ) from err
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="battery_operation_failed",
-                translation_placeholders={"error": error_detail(err)},
-            ) from err
+    async def set_battery_config(
+        self,
+        sn: str,
+        *,
+        mode: BatteryWorkMode | None = None,
+        soc_min: int | None = None,
+        soc_max: int | None = None,
+    ) -> None:
+        """Set work mode and SOC limits in one verified write.
 
-    async def set_battery_soc_min(self, sn: str, value: int) -> None:
-        """Set battery soc min."""
+        Used by the work mode select, the SOC number entities and the
+        `set_battery_config` action. The write and its read-back run in a single
+        gateway turn, so no poll can slip in between. Only this battery's
+        configuration is refreshed from the verified read-back; no full metadata
+        refresh is needed.
+        """
         try:
             async with self.runtime.coordinator_lock:
-                await self.__api.set_battery_soc_min(sn, value)
-            await self.runtime.async_request_metadata_refresh()
+                info = await self.__api.set_battery_config(sn, mode=mode, soc_min=soc_min, soc_max=soc_max)
         except NotImplementedError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="battery_operation_unsupported_v1",
+            ) from err
+        except InvalidBatterySocRangeError as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="battery_soc_range_invalid",
+                translation_placeholders={"soc_min": str(err.soc_min), "soc_max": str(err.soc_max)},
+            ) from err
+        except BatteryConfigNotAppliedError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="battery_config_not_applied",
+                translation_placeholders={
+                    "expected": format_battery_config(err.expected),
+                    "actual": format_battery_config(err.actual),
+                },
             ) from err
         except Exception as err:
             raise HomeAssistantError(
@@ -439,24 +467,7 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
                 translation_key="battery_operation_failed",
                 translation_placeholders={"error": error_detail(err)},
             ) from err
-
-    async def set_battery_soc_max(self, sn: str, value: int) -> None:
-        """Set battery soc max."""
-        try:
-            async with self.runtime.coordinator_lock:
-                await self.__api.set_battery_soc_max(sn, value)
-            await self.runtime.async_request_metadata_refresh()
-        except NotImplementedError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="battery_operation_unsupported_v1",
-            ) from err
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="battery_operation_failed",
-                translation_placeholders={"error": error_detail(err)},
-            ) from err
+        self.runtime.store_battery_info(sn, info)
 
     async def set_battery_schedule_slots(self, sn: str, slots: dict[str, list[ScheduleSlot]]) -> None:
         """Set battery schedule slots."""

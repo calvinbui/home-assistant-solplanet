@@ -118,7 +118,10 @@ async def test_number_catalog_values_callbacks_and_capabilities() -> None:
     assert schedule_entity.native_step == 1
     assert soc_entity.native_max_value == 100
     await soc_entity.async_set_native_value(82.9)
-    coordinator.set_battery_soc_max.assert_awaited_once_with("bat-1", 82)
+    coordinator.set_battery_config.assert_awaited_once_with("bat-1", soc_max=82)
+    soc_min = next(item for item in descriptions if item.key.endswith("soc_min"))
+    await number.SolplanetNumber(soc_min, "bat-1", coordinator).async_set_native_value(12)
+    coordinator.set_battery_config.assert_awaited_with("bat-1", soc_min=12)
 
     without_led = FakeCoordinator(integration_data(led_battery=False))
     assert len(number.create_battery_entities_description(without_led, "bat-1")) == 4
@@ -168,9 +171,10 @@ async def test_select_options_mapping_selection_and_refresh() -> None:
     assert entity.options == ["Self-consumption", "Backup"]
     assert entity.current_option == "Self-consumption"
     await entity.async_select_option("Backup")
-    coordinator.set_battery_work_mode.assert_awaited_once()
+    backup = coordinator.data[BATTERY_IDENTIFIER]["bat-1"]["work_modes"]["all"][1]
+    coordinator.set_battery_config.assert_awaited_once_with("bat-1", mode=backup)
     await entity.async_select_option("missing")
-    coordinator.set_battery_work_mode.assert_awaited_once()
+    coordinator.set_battery_config.assert_awaited_once()
 
     coordinator.data[BATTERY_IDENTIFIER]["bat-1"]["work_modes"]["all"].append(
         SimpleNamespace(name="Peak shaving")

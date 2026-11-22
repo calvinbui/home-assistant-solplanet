@@ -14,6 +14,8 @@ import aiohttp
 import pytest
 
 from custom_components.solplanet.client import (
+    BATTERY_CONFIG_VERIFY_DELAY,
+    BatteryConfigNotAppliedError,
     BatterySchedule,
     BatteryWorkMode,
     BatteryWorkModes,
@@ -24,6 +26,7 @@ from custom_components.solplanet.client import (
     GetInverterInfoResponse,
     GetMeterDataResponse,
     GetMeterInfoResponse,
+    InvalidBatterySocRangeError,
     ModbusApiMixin,
     ScheduleSlot,
     SetBatteryConfigRequest,
@@ -32,6 +35,7 @@ from custom_components.solplanet.client import (
     SolplanetApiV1,
     SolplanetApiV2,
     SolplanetClient,
+    format_battery_config,
 )
 from custom_components.solplanet.modbus import DataType, ModbusRtuFrameGenerator
 
@@ -577,38 +581,6 @@ def _battery_info() -> GetBatteryInfoResponse:
     )
 
 
-@pytest.mark.parametrize(
-    ("method", "argument", "expected_type", "expected_mode", "expected_min", "expected_max"),
-    [
-        ("set_battery_work_mode", BatteryWorkMode("Custom", 4, 7), 7, 4, 10, 90),
-        ("set_battery_soc_min", 15, 1, 2, 15, 90),
-        ("set_battery_soc_max", 95, 1, 2, 10, 95),
-    ],
-)
-async def test_v2_battery_configuration(
-    method: str,
-    argument: object,
-    expected_type: int,
-    expected_mode: int,
-    expected_min: int,
-    expected_max: int,
-) -> None:
-    """Battery changes preserve all untouched configuration values."""
-    client = MagicMock()
-    client.post = AsyncMock(return_value={"dat": "ok"})
-    api = SolplanetApiV2(client)
-    api.get_battery_info = AsyncMock(return_value=_battery_info())  # type: ignore[method-assign]
-    await getattr(api, method)("BAT", argument)
-    request = client.post.await_args.args[1]
-    assert isinstance(request, SetBatteryConfigRequest)
-    assert request.value.type == expected_type
-    assert request.value.mod_r == expected_mode
-    assert request.value.sn == "BAT"
-    assert request.value.discharge_max == expected_min
-    assert request.value.charge_max == expected_max
-    client.post.assert_awaited_once_with("setting.cgi", request)
-
-
 async def test_v2_get_schedule() -> None:
     """Schedule retrieval returns raw data, decoded slots, and power defaults."""
     slot = ScheduleSlot(8, 0, 1, "charge")
@@ -844,3 +816,169 @@ async def test_grid_status_deadline_cancels_request_and_releases_shared_queue() 
     assert cancelled.is_set()
     assert not queue.locked()
     client.post.assert_awaited_once()
+
+
+def _info(battery_type: int, mod_r: int, soc_min: int, soc_max: int) -> GetBatteryInfoResponse:
+    return GetBatteryInfoResponse(
+        type=battery_type, mod_r=mod_r, discharge_max=soc_min, charge_max=soc_max, muf=3, mod=4, num=1
+    )
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected"),
+    [
+        ({"mode": BatteryWorkMode("Reserve", 3, 1), "soc_max": 95}, (1, 3, 10, 95)),
+        ({"soc_min": 20, "soc_max": 80}, (1, 2, 20, 80)),
+        ({"mode": BatteryWorkMode("Custom", 4, 7), "soc_min": 15, "soc_max": 100}, (7, 4, 15, 100)),
+    ],
+)
+async def test_v2_set_battery_config_writes_once_and_verifies(
+    kwargs: dict[str, object], expected: tuple[int, int, int, int]
+) -> None:
+    """Mode and SOC limits go out in one request and are confirmed by a read-back."""
+    client = MagicMock()
+    client.post = AsyncMock(return_value={"dat": "ok"})
+    api = SolplanetApiV2(client)
+    verified = _info(*expected)
+    api.get_battery_info = AsyncMock(side_effect=[_battery_info(), verified])  # type: ignore[method-assign]
+
+    with patch("custom_components.solplanet.client.asyncio.sleep", new=AsyncMock()):
+        assert await api.set_battery_config("BAT", **kwargs) is verified  # type: ignore[arg-type]
+
+    assert api.get_battery_info.await_count == 2
+    client.post.assert_awaited_once()
+    endpoint, request = client.post.await_args.args
+    assert endpoint == "setting.cgi"
+    assert isinstance(request, SetBatteryConfigRequest)
+    value = request.value
+    assert (value.type, value.mod_r, value.discharge_max, value.charge_max) == expected
+    assert (value.sn, value.muf, value.mod, value.num) == ("BAT", 3, 4, 1)
+
+
+async def test_v2_set_battery_config_skips_write_when_unchanged() -> None:
+    """No request is sent when the battery already has the requested configuration."""
+    client = MagicMock()
+    client.post = AsyncMock()
+    api = SolplanetApiV2(client)
+    current = _battery_info()
+    api.get_battery_info = AsyncMock(return_value=current)  # type: ignore[method-assign]
+
+    result = await api.set_battery_config("BAT", mode=BatteryWorkMode("Self", 2, 1), soc_min=10, soc_max=90)
+
+    assert result is current
+    client.post.assert_not_awaited()
+    api.get_battery_info.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    "write_error",
+    [TimeoutError(), aiohttp.ClientConnectionError("reset"), json.JSONDecodeError("bad", "<html>", 0)],
+)
+async def test_v2_set_battery_config_verifies_after_lost_reply(write_error: Exception) -> None:
+    """A write whose reply is lost or unreadable still succeeds when the read-back shows it applied."""
+    client = MagicMock()
+    client.post = AsyncMock(side_effect=write_error)
+    api = SolplanetApiV2(client)
+    verified = _info(1, 2, 10, 95)
+    api.get_battery_info = AsyncMock(side_effect=[_battery_info(), verified])  # type: ignore[method-assign]
+
+    with patch("custom_components.solplanet.client.asyncio.sleep", new=AsyncMock()):
+        assert await api.set_battery_config("BAT", soc_max=95) is verified
+
+
+async def test_v2_set_battery_config_fails_fast_on_http_error() -> None:
+    """An HTTP error status means the dongle rejected the write, so it is not verified."""
+    client = MagicMock()
+    client.post = AsyncMock(
+        side_effect=aiohttp.ClientResponseError(MagicMock(), (), status=500, message="Internal Server Error")
+    )
+    api = SolplanetApiV2(client)
+    api.get_battery_info = AsyncMock(return_value=_battery_info())  # type: ignore[method-assign]
+    sleep = AsyncMock()
+
+    with (
+        patch("custom_components.solplanet.client.asyncio.sleep", new=sleep),
+        pytest.raises(aiohttp.ClientResponseError),
+    ):
+        await api.set_battery_config("BAT", soc_max=95)
+
+    api.get_battery_info.assert_awaited_once()
+    sleep.assert_not_awaited()
+
+
+async def test_v2_set_battery_config_checks_once_then_fails() -> None:
+    """The write is verified by one read-back after a short pause; a mismatch raises with labelled values."""
+    client = MagicMock()
+    client.post = AsyncMock(return_value={"dat": "ok"})
+    api = SolplanetApiV2(client)
+    stale = _battery_info()
+    api.get_battery_info = AsyncMock(side_effect=[stale, stale])  # type: ignore[method-assign]
+    sleep = AsyncMock()
+
+    with (
+        patch("custom_components.solplanet.client.asyncio.sleep", new=sleep),
+        pytest.raises(BatteryConfigNotAppliedError) as exc_info,
+    ):
+        await api.set_battery_config("BAT", soc_max=95)
+
+    sleep.assert_awaited_once_with(BATTERY_CONFIG_VERIFY_DELAY)
+    assert api.get_battery_info.await_count == 2
+    assert exc_info.value.expected == (1, 2, 10, 95)
+    assert exc_info.value.actual == (1, 2, 10, 90)
+    assert str(exc_info.value) == (
+        "expected type=1 mod_r=2 soc_min=10 soc_max=95, read type=1 mod_r=2 soc_min=10 soc_max=90"
+    )
+
+
+async def test_v2_set_battery_config_read_back_error_propagates() -> None:
+    """If the single read-back fails, the error is raised instead of retrying."""
+    client = MagicMock()
+    client.post = AsyncMock(side_effect=TimeoutError())
+    api = SolplanetApiV2(client)
+    api.get_battery_info = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[_battery_info(), aiohttp.ClientConnectionError("reset")]
+    )
+
+    with (
+        patch("custom_components.solplanet.client.asyncio.sleep", new=AsyncMock()),
+        pytest.raises(aiohttp.ClientConnectionError),
+    ):
+        await api.set_battery_config("BAT", soc_max=95)
+    assert api.get_battery_info.await_count == 2
+
+
+def test_format_battery_config() -> None:
+    """Battery configurations are described with labels."""
+    assert format_battery_config((1, 3, 10, None)) == "type=1 mod_r=3 soc_min=10 soc_max=None"
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "soc_range"),
+    [
+        ({"soc_min": 95}, (95, 90)),
+        ({"soc_max": 10}, (10, 10)),
+        ({"mode": BatteryWorkMode("Reserve", 3, 1), "soc_min": 90}, (90, 90)),
+    ],
+)
+async def test_v2_set_battery_config_rejects_partial_inverted_range(
+    kwargs: dict[str, object], soc_range: tuple[int, int]
+) -> None:
+    """A single limit is checked against the other one read from the battery, before writing."""
+    client = MagicMock()
+    client.post = AsyncMock()
+    api = SolplanetApiV2(client)
+    api.get_battery_info = AsyncMock(return_value=_battery_info())  # type: ignore[method-assign]
+
+    with pytest.raises(InvalidBatterySocRangeError) as exc_info:
+        await api.set_battery_config("BAT", **kwargs)  # type: ignore[arg-type]
+
+    assert (exc_info.value.soc_min, exc_info.value.soc_max) == soc_range
+    client.post.assert_not_awaited()
+    api.get_battery_info.assert_awaited_once()
+
+
+def test_battery_work_modes_lookup_by_name() -> None:
+    """Known modes can be listed and resolved by their display name."""
+    assert "Reserve power mode" in BatteryWorkModes.names()
+    assert BatteryWorkModes.by_name("Reserve power mode") == BatteryWorkMode("Reserve power mode", 3, 1)
+    assert BatteryWorkModes.by_name("Nope") is None
