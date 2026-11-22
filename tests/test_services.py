@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import probatio
 import pytest
+import yaml
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.solplanet import services
@@ -697,3 +699,11 @@ async def test_set_battery_config_schema_bounds() -> None:
     for invalid in ({"mode": "Turbo"}, {"soc_min": 4}, {"soc_max": 101}, {"soc_max": 9}):
         with pytest.raises(probatio.Invalid):
             schema(invalid)
+
+
+def test_set_battery_config_mode_options_match_work_modes() -> None:
+    """The action's mode selector offers exactly the known battery work modes."""
+    services_yaml = Path(services.__file__).with_name("services.yaml")
+    definition = yaml.safe_load(services_yaml.read_text(encoding="utf-8"))
+    options = definition["set_battery_config"]["fields"]["mode"]["selector"]["select"]["options"]
+    assert options == BatteryWorkModes.names()

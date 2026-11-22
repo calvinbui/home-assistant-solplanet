@@ -130,9 +130,6 @@ async def test_indexed_meter_reads_delegate_only_to_v2() -> None:
     [
         ("get_battery_data", ("BAT",)),
         ("get_battery_info", ("BAT",)),
-        ("set_battery_work_mode", ("BAT", BatteryWorkMode("Custom", 4, 1))),
-        ("set_battery_soc_min", ("BAT", 10)),
-        ("set_battery_soc_max", ("BAT", 90)),
         ("get_schedule", ()),
         ("get_grid_status", (7,)),
         ("set_schedule_power", (1000, 2000)),
@@ -158,9 +155,6 @@ async def test_v2_battery_operations_delegate(method: str, args: tuple[object, .
     [
         ("get_battery_data", ("BAT",)),
         ("get_battery_info", ("BAT",)),
-        ("set_battery_work_mode", ("BAT", BatteryWorkMode("Custom", 4, 1))),
-        ("set_battery_soc_min", ("BAT", 10)),
-        ("set_battery_soc_max", ("BAT", 90)),
         ("get_schedule", ()),
         ("get_grid_status", (7,)),
         ("set_schedule_power", (1000, 2000)),

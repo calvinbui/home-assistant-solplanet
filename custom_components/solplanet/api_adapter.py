@@ -182,30 +182,6 @@ class SolplanetApiAdapter:
         """
         return await self._v2_api().get_battery_info(sn)
 
-    async def set_battery_work_mode(self, sn: str, mode: BatteryWorkMode) -> None:
-        """Set battery work mode.
-
-        Raises:
-            NotImplementedError: If battery operations are not supported (V1 protocol)
-        """
-        await self._v2_api().set_battery_work_mode(sn, mode)
-
-    async def set_battery_soc_min(self, sn: str, soc_min: int) -> None:
-        """Set battery minimum SOC.
-
-        Raises:
-            NotImplementedError: If battery operations are not supported (V1 protocol)
-        """
-        await self._v2_api().set_battery_soc_min(sn, soc_min)
-
-    async def set_battery_soc_max(self, sn: str, soc_max: int) -> None:
-        """Set battery maximum SOC.
-
-        Raises:
-            NotImplementedError: If battery operations are not supported (V1 protocol)
-        """
-        await self._v2_api().set_battery_soc_max(sn, soc_max)
-
     async def set_battery_config(
         self,
         sn: str,

@@ -27,6 +27,7 @@ from .client import (
     GetInverterDataResponse,
     InvalidBatterySocRangeError,
     ScheduleSlot,
+    format_battery_config,
 )
 from .const import (
     BATTERY_IDENTIFIER,
@@ -421,60 +422,6 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
         """Set battery LED brightness percent (offset 1503)."""
         await self._write_battery_more_setting(register_offset=1503, value=int(brightness))
 
-    async def set_battery_work_mode(self, sn: str, mode: BatteryWorkMode) -> None:
-        """Set battery work mode."""
-        try:
-            async with self.runtime.coordinator_lock:
-                await self.__api.set_battery_work_mode(sn, mode)
-            await self.runtime.async_request_metadata_refresh()
-        except NotImplementedError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="battery_operation_unsupported_v1",
-            ) from err
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="battery_operation_failed",
-                translation_placeholders={"error": error_detail(err)},
-            ) from err
-
-    async def set_battery_soc_min(self, sn: str, value: int) -> None:
-        """Set battery soc min."""
-        try:
-            async with self.runtime.coordinator_lock:
-                await self.__api.set_battery_soc_min(sn, value)
-            await self.runtime.async_request_metadata_refresh()
-        except NotImplementedError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="battery_operation_unsupported_v1",
-            ) from err
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="battery_operation_failed",
-                translation_placeholders={"error": error_detail(err)},
-            ) from err
-
-    async def set_battery_soc_max(self, sn: str, value: int) -> None:
-        """Set battery soc max."""
-        try:
-            async with self.runtime.coordinator_lock:
-                await self.__api.set_battery_soc_max(sn, value)
-            await self.runtime.async_request_metadata_refresh()
-        except NotImplementedError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="battery_operation_unsupported_v1",
-            ) from err
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="battery_operation_failed",
-                translation_placeholders={"error": error_detail(err)},
-            ) from err
-
     async def set_battery_config(
         self,
         sn: str,
@@ -485,9 +432,11 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
     ) -> None:
         """Set work mode and SOC limits in one verified write.
 
-        The write and its read-back run in a single gateway turn, so no poll can
-        slip in between. Only this battery's configuration is refreshed from the
-        verified read-back; no full metadata refresh is needed.
+        Used by the work mode select, the SOC number entities and the
+        `set_battery_config` action. The write and its read-back run in a single
+        gateway turn, so no poll can slip in between. Only this battery's
+        configuration is refreshed from the verified read-back; no full metadata
+        refresh is needed.
         """
         try:
             async with self.runtime.coordinator_lock:
@@ -507,13 +456,16 @@ class SolplanetDataUpdateCoordinator(DataUpdateCoordinator[SolplanetData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="battery_config_not_applied",
-                translation_placeholders={"expected": str(err.expected), "actual": str(err.actual)},
+                translation_placeholders={
+                    "expected": format_battery_config(err.expected),
+                    "actual": format_battery_config(err.actual),
+                },
             ) from err
         except Exception as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="battery_operation_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_detail(err)},
             ) from err
         self.runtime.store_battery_info(sn, info)
 

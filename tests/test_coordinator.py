@@ -72,9 +72,6 @@ def _api(version: str = "v2") -> SimpleNamespace:
         modbus_read_input_registers=AsyncMock(return_value=1),
         modbus_write_single_holding_register=AsyncMock(),
         modbus_write_multiple_holding_registers=AsyncMock(),
-        set_battery_work_mode=AsyncMock(),
-        set_battery_soc_min=AsyncMock(),
-        set_battery_soc_max=AsyncMock(),
         set_battery_config=AsyncMock(),
         set_schedule_slots=AsyncMock(),
         set_schedule_power=AsyncMock(),
@@ -569,9 +566,6 @@ async def test_battery_more_setting_v1_error() -> None:
 @pytest.mark.parametrize(
     ("method_name", "api_method", "arguments", "expected_arguments"),
     [
-        ("set_battery_work_mode", "set_battery_work_mode", ("bat", "mode"), ("bat", "mode")),
-        ("set_battery_soc_min", "set_battery_soc_min", ("bat", 10), ("bat", 10)),
-        ("set_battery_soc_max", "set_battery_soc_max", ("bat", 90), ("bat", 90)),
         ("set_battery_schedule_pin", "set_schedule_pin", ("bat", 2500), (2500,)),
         ("set_battery_schedule_pout", "set_schedule_pout", ("bat", 3000), (3000,)),
     ],
@@ -1743,11 +1737,17 @@ async def test_set_battery_config_maps_errors() -> None:
         exc_info.value, "battery_soc_range_invalid", {"soc_min": "95", "soc_max": "90"}
     )
 
-    api.set_battery_config.side_effect = BatteryConfigNotAppliedError((1, 2, 10, 95), None, TimeoutError())
+    stale = GetBatteryInfoResponse(type=1, mod_r=2, discharge_max=10, charge_max=90, muf=3, mod=4, num=1)
+    api.set_battery_config.side_effect = BatteryConfigNotAppliedError((1, 2, 10, 95), stale, TimeoutError())
     with pytest.raises(HomeAssistantError) as exc_info:
         await coordinator.set_battery_config("bat", soc_max=95)
     _assert_translated_exception(
-        exc_info.value, "battery_config_not_applied", {"expected": "(1, 2, 10, 95)", "actual": "None"}
+        exc_info.value,
+        "battery_config_not_applied",
+        {
+            "expected": "type=1 mod_r=2 soc_min=10 soc_max=95",
+            "actual": "type=1 mod_r=2 soc_min=10 soc_max=90",
+        },
     )
 
     api.set_battery_config.side_effect = RuntimeError("offline")

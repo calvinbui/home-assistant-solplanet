@@ -83,7 +83,7 @@ def create_battery_entities_description(
             native_max_value=100,
             native_step=1,
             native_unit_of_measurement=PERCENTAGE,
-            callback=lambda value: coordinator.set_battery_soc_max(isn, int(value)),
+            callback=lambda value: coordinator.set_battery_config(isn, soc_max=int(value)),
         ),
         SolplanetNumberEntityDescription(
             key=f"{isn}_soc_min",
@@ -96,7 +96,7 @@ def create_battery_entities_description(
             native_max_value=100,
             native_step=1,
             native_unit_of_measurement=PERCENTAGE,
-            callback=lambda value: coordinator.set_battery_soc_min(isn, int(value)),
+            callback=lambda value: coordinator.set_battery_config(isn, soc_min=int(value)),
         ),
         SolplanetNumberEntityDescription(
             key=f"{isn}_schedule_pin",
