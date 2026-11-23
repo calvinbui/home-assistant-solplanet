@@ -14,7 +14,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import SolplanetConfigEntry
 from .const import BATTERY_IDENTIFIER, BATTERY_MODELS_WITH_LED, DISCOVERY_SIGNAL
 from .coordinator import SolplanetDataUpdateCoordinator
-from .entity import SolplanetEntity, SolplanetEntityDescription, get_entity_unique_id
+from .entity import (
+    SolplanetEntity,
+    SolplanetEntityDescription,
+    battery_more_setting_supported,
+    get_entity_unique_id,
+)
 
 _LOGGER = logging.getLogger(__name__)
 PARALLEL_UPDATES = 0
@@ -129,7 +134,7 @@ def create_battery_entities_description(
         (battery_info.muf, battery_info.mod) in BATTERY_MODELS_WITH_LED
         if battery_info and battery_info.muf is not None and battery_info.mod is not None
         else False
-    )
+    ) and battery_more_setting_supported(coordinator, isn, "led_color_index")
 
     entities = [
         SolplanetSelectEntityDescription(

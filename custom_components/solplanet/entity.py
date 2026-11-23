@@ -10,11 +10,22 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity, EntityDescription
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, INVERTER_IDENTIFIER
+from .const import BATTERY_IDENTIFIER, DOMAIN, INVERTER_IDENTIFIER
 from .coordinator import SolplanetDataUpdateCoordinator
 from .exceptions import InverterInSleepModeError
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def battery_more_setting_supported(coordinator: Any, isn: str, key: str) -> bool:
+    """Return whether the dongle has returned a battery "More Settings" value.
+
+    Some battery/dongle combinations answer the Modbus read for these registers with an empty
+    or malformed frame, so the settings never populate. Entities backed by them are only created
+    once a value has been read; they are added later if a read succeeds.
+    """
+    settings = coordinator.data.get(BATTERY_IDENTIFIER, {}).get(isn, {}).get("more_settings")
+    return isinstance(settings, dict) and settings.get(key) is not None
 
 
 @dataclass(frozen=True, kw_only=True)
