@@ -322,3 +322,47 @@ async def test_battery_more_setting_switches_hidden_until_settings_are_read() ->
     coordinator.listeners[0]()
     assert len(added) == 3
     assert entry.unloads
+
+
+async def test_inverter_power_switch_hidden_until_settings_are_read() -> None:
+    """The inverter power switch is read over Modbus too, so it follows the same rule."""
+    data = integration_data()
+    data[INVERTER_IDENTIFIER]["inv-1"]["more_settings"] = {}
+    coordinator = FakeCoordinator(data)
+    _entry, _discover, added = await _setup_platform(switch, coordinator)
+    assert "inv-1_inverter_power" not in [entity.entity_description.key for entity in added]
+
+    coordinator.data[INVERTER_IDENTIFIER]["inv-1"]["more_settings"] = {"power_on": True}
+    coordinator.listeners[0]()
+    assert "inv-1_inverter_power" in [entity.entity_description.key for entity in added]
+
+
+async def test_registered_entities_are_kept_when_the_device_has_no_data() -> None:
+    """A device that is asleep or slow at startup must not make an existing entity disappear."""
+    data = _without_more_settings(integration_data())
+    data[INVERTER_IDENTIFIER]["inv-1"]["data"] = None
+    data[INVERTER_IDENTIFIER]["inv-1"]["more_settings"] = {}
+    coordinator = FakeCoordinator(data)
+    assert binary_sensor.create_inverter_binary_sensors(coordinator, "inv-1") == []
+
+    registry = coordinator.entity_registry
+    registry.register("binary_sensor", "solplanet_inv-1_grid_sts")
+    registry.register("switch", "solplanet_inv-1_inverter_power")
+    registry.register("switch", "solplanet_battery_bat-1_battery_power")
+    registry.register("number", "solplanet_battery_bat-1_led_brightness")
+    registry.register("select", "solplanet_battery_bat-1_led_color")
+
+    assert [
+        d.translation_key for d in binary_sensor.create_inverter_binary_sensors(coordinator, "inv-1")
+    ] == ["grid_status"]
+    _entry, _discover, switches = await _setup_platform(switch, coordinator)
+    assert sorted(entity.entity_description.key for entity in switches) == [
+        "bat-1_battery_power",
+        "inv-1_inverter_power",
+    ]
+    assert "bat-1_led_brightness" in [
+        d.key for d in number.create_battery_entities_description(coordinator, "bat-1")
+    ]
+    assert "bat-1_led_color" in [
+        d.key for d in select.create_battery_entities_description(coordinator, "bat-1")
+    ]

@@ -18,7 +18,7 @@ from . import SolplanetConfigEntry
 from .client import BatterySchedule
 from .const import BATTERY_IDENTIFIER, DISCOVERY_SIGNAL, INVERTER_IDENTIFIER
 from .coordinator import SolplanetDataUpdateCoordinator
-from .entity import SolplanetEntity, SolplanetEntityDescription, get_entity_unique_id
+from .entity import SolplanetEntity, SolplanetEntityDescription, get_entity_unique_id, should_create_entity
 
 _LOGGER = logging.getLogger(__name__)
 PARALLEL_UPDATES = 0
@@ -91,24 +91,21 @@ def create_inverter_binary_sensors(
 ) -> list[SolplanetBinarySensorEntityDescription]:
     """Create binary sensors for inverter.
 
-    Grid status is only offered once the inverter has reported it. Many V2 inverters never return
-    it in the live JSON and reject the Modbus fallback register, so it would stay Unknown forever.
+    Grid status is only offered once the inverter has reported it (or if it is already registered).
+    Some V2 inverters never return it in the live JSON and reject the Modbus fallback register, so it
+    would stay Unknown forever.
     """
-    inverter_data = coordinator.data.get(INVERTER_IDENTIFIER, {}).get(isn, {}).get("data")
-    if getattr(inverter_data, "grid_sts", None) is None:
-        return []
-    return [
-        SolplanetBinarySensorEntityDescription(
-            key=f"{isn}_grid_sts",
-            translation_key="grid_status",
-            device_class=BinarySensorDeviceClass.CONNECTIVITY,
-            data_field_device_type=INVERTER_IDENTIFIER,
-            data_field_data_type="data",
-            data_field_path=["grid_sts"],
-            data_field_value_mapper=lambda v: {0: False, 1: True}.get(v),
-            entity_category=EntityCategory.DIAGNOSTIC,
-        ),
-    ]
+    grid_status = SolplanetBinarySensorEntityDescription(
+        key=f"{isn}_grid_sts",
+        translation_key="grid_status",
+        device_class=BinarySensorDeviceClass.CONNECTIVITY,
+        data_field_device_type=INVERTER_IDENTIFIER,
+        data_field_data_type="data",
+        data_field_path=["grid_sts"],
+        data_field_value_mapper=lambda v: {0: False, 1: True}.get(v),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    )
+    return [grid_status] if should_create_entity(coordinator, "binary_sensor", grid_status, isn) else []
 
 
 async def async_setup_entry(

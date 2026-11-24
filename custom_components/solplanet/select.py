@@ -17,8 +17,8 @@ from .coordinator import SolplanetDataUpdateCoordinator
 from .entity import (
     SolplanetEntity,
     SolplanetEntityDescription,
-    battery_more_setting_supported,
     get_entity_unique_id,
+    should_create_entity,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -134,7 +134,7 @@ def create_battery_entities_description(
         (battery_info.muf, battery_info.mod) in BATTERY_MODELS_WITH_LED
         if battery_info and battery_info.muf is not None and battery_info.mod is not None
         else False
-    ) and battery_more_setting_supported(coordinator, isn, "led_color_index")
+    )
 
     entities = [
         SolplanetSelectEntityDescription(
@@ -154,22 +154,22 @@ def create_battery_entities_description(
     ]
 
     if has_led:
-        entities.append(
-            SolplanetSelectEntityDescription(
-                key=f"{isn}_led_color",
-                translation_key="led_color",
-                entity_category=EntityCategory.CONFIG,
-                unique_id_suffix="led_color",
-                data_field_device_type=BATTERY_IDENTIFIER,
-                data_field_data_type="more_settings",
-                data_field_path=["led_color_index"],
-                # Entity expects a string option; we store int in value and use label for display.
-                get_options=_get_led_color_options,
-                callback=lambda option: coordinator.set_battery_led_color_index(int(option.value)),
-                data_field_value_mapper=lambda v: _format_led_color_label(int(v)) if v is not None else None,
-                attributes_fn=_get_led_color_attributes,
-            )
+        led_color = SolplanetSelectEntityDescription(
+            key=f"{isn}_led_color",
+            translation_key="led_color",
+            entity_category=EntityCategory.CONFIG,
+            unique_id_suffix="led_color",
+            data_field_device_type=BATTERY_IDENTIFIER,
+            data_field_data_type="more_settings",
+            data_field_path=["led_color_index"],
+            # Entity expects a string option; we store int in value and use label for display.
+            get_options=_get_led_color_options,
+            callback=lambda option: coordinator.set_battery_led_color_index(int(option.value)),
+            data_field_value_mapper=lambda v: _format_led_color_label(int(v)) if v is not None else None,
+            attributes_fn=_get_led_color_attributes,
         )
+        if should_create_entity(coordinator, "select", led_color, isn):
+            entities.append(led_color)
 
     return entities
 

@@ -17,8 +17,8 @@ from .const import BATTERY_IDENTIFIER, DISCOVERY_SIGNAL, INVERTER_IDENTIFIER
 from .entity import (
     SolplanetEntity,
     SolplanetEntityDescription,
-    battery_more_setting_supported,
     get_entity_unique_id,
+    should_create_entity,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -127,21 +127,15 @@ async def async_setup_entry(
 
     known_unique_ids: set[str] = set()
 
-    def _is_supported(
-        description: SolplanetSwitchEntityDescription, device_type: str, device_id: str
-    ) -> bool:
-        """Return whether the dongle has returned the setting behind this switch."""
-        if device_type != BATTERY_IDENTIFIER or description.data_field_data_type != "more_settings":
-            return True
-        return battery_more_setting_supported(coordinator, device_id, str(description.data_field_path[0]))
-
     def _create_switches(device_type: str, device_ids: set[str]) -> list[SolplanetSwitch]:
         factory = description_factories[device_type]
         switches: list[SolplanetSwitch] = []
         for device_id in device_ids:
             for description in factory(device_id):
                 unique_id = get_entity_unique_id(description, device_id)
-                if unique_id in known_unique_ids or not _is_supported(description, device_type, device_id):
+                if unique_id in known_unique_ids or not should_create_entity(
+                    coordinator, "switch", description, device_id
+                ):
                     continue
                 known_unique_ids.add(unique_id)
                 switches.append(
@@ -167,7 +161,11 @@ async def async_setup_entry(
     @callback
     def _async_add_supported_switches() -> None:
         """Add switches whose settings the dongle returned after setup."""
-        new_switches = _create_switches(BATTERY_IDENTIFIER, known_device_ids[BATTERY_IDENTIFIER])
+        new_switches = [
+            switch
+            for device_type, device_ids in known_device_ids.items()
+            for switch in _create_switches(device_type, device_ids)
+        ]
         if new_switches:
             async_add_entities(new_switches)
 

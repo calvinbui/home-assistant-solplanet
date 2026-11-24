@@ -6,26 +6,16 @@ from dataclasses import dataclass
 from typing import Any, cast, override
 
 from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity, EntityDescription
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import BATTERY_IDENTIFIER, DOMAIN, INVERTER_IDENTIFIER
+from .const import DOMAIN, INVERTER_IDENTIFIER
 from .coordinator import SolplanetDataUpdateCoordinator
 from .exceptions import InverterInSleepModeError
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def battery_more_setting_supported(coordinator: Any, isn: str, key: str) -> bool:
-    """Return whether the dongle has returned a battery "More Settings" value.
-
-    Some battery/dongle combinations answer the Modbus read for these registers with an empty
-    or malformed frame, so the settings never populate. Entities backed by them are only created
-    once a value has been read; they are added later if a read succeeds.
-    """
-    settings = coordinator.data.get(BATTERY_IDENTIFIER, {}).get(isn, {}).get("more_settings")
-    return isinstance(settings, dict) and settings.get(key) is not None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -50,6 +40,33 @@ def get_entity_unique_id(description: SolplanetEntityDescription, device_id: str
     if description.data_field_device_type == INVERTER_IDENTIFIER:
         return f"solplanet_{device_id}_{suffix}"
     return f"solplanet_{description.data_field_device_type}_{device_id}_{suffix}"
+
+
+def should_create_entity(
+    coordinator: Any, platform: str, description: SolplanetEntityDescription, device_id: str
+) -> bool:
+    """Return whether an entity backed by an optional value should be created.
+
+    Some devices never report certain values (for example the grid status in the inverter JSON, or the
+    battery "More Settings" read over Modbus), which would leave their entities Unknown forever. Such
+    entities are created once a value has been reported. An entity that is already registered is always
+    kept, so a device that is asleep or slow at startup does not make an existing entity disappear.
+    """
+    unique_id = get_entity_unique_id(description, device_id)
+    if er.async_get(coordinator.hass).async_get_entity_id(platform, DOMAIN, unique_id) is not None:
+        return True
+    value: Any = (
+        coordinator.data.get(description.data_field_device_type, {})
+        .get(device_id, {})
+        .get(description.data_field_data_type)
+    )
+    for path_item in description.data_field_path:
+        if value is None:
+            return False
+        value = (
+            value.get(path_item) if isinstance(value, abc.Mapping) else getattr(value, str(path_item), None)
+        )
+    return value is not None
 
 
 class SolplanetEntity(CoordinatorEntity[SolplanetDataUpdateCoordinator], Entity):

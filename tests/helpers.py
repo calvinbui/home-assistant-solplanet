@@ -5,9 +5,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from homeassistant.helpers import entity_registry as er
+
 from custom_components.solplanet.client import GetInverterDataResponse, ScheduleSlot
 from custom_components.solplanet.const import (
     BATTERY_IDENTIFIER,
+    DOMAIN,
     DONGLE_IDENTIFIER,
     INVERTER_IDENTIFIER,
     METER_IDENTIFIER,
@@ -124,6 +127,28 @@ def integration_data(*, led_battery: bool = True) -> dict[str, dict]:
     }
 
 
+class FakeEntityRegistry:
+    """Entity-registry double that only answers unique-ID lookups."""
+
+    def __init__(self) -> None:
+        self.registered: set[tuple[str, str, str]] = set()
+
+    def register(self, platform: str, unique_id: str) -> None:
+        """Pretend an entity with this unique ID already exists."""
+        self.registered.add((platform, DOMAIN, unique_id))
+
+    def async_get_entity_id(self, domain: str, platform: str, unique_id: str) -> str | None:
+        """Return a fake entity ID when the unique ID is registered."""
+        return f"{domain}.fake" if (domain, platform, unique_id) in self.registered else None
+
+
+class FakeHass:
+    """Hashable Home Assistant double exposing only ``data``."""
+
+    def __init__(self, data: dict) -> None:
+        self.data = data
+
+
 class FakeCoordinator:
     """Coordinator-shaped object used by platform and entity tests."""
 
@@ -133,6 +158,8 @@ class FakeCoordinator:
         self.last_update_success = True
         self.failed_device_ids: set[str] = set()
         self.listeners: list = []
+        self.entity_registry = FakeEntityRegistry()
+        self.hass = FakeHass({er.DATA_REGISTRY: self.entity_registry})
 
         for method in (
             "dongle_sync_time",

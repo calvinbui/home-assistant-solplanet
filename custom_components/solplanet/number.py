@@ -17,8 +17,8 @@ from .coordinator import SolplanetDataUpdateCoordinator
 from .entity import (
     SolplanetEntity,
     SolplanetEntityDescription,
-    battery_more_setting_supported,
     get_entity_unique_id,
+    should_create_entity,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ def create_battery_entities_description(
         (battery_info.muf, battery_info.mod) in BATTERY_MODELS_WITH_LED
         if battery_info and battery_info.muf is not None and battery_info.mod is not None
         else False
-    ) and battery_more_setting_supported(coordinator, isn, "led_brightness")
+    )
 
     entities = [
         SolplanetNumberEntityDescription(
@@ -132,21 +132,21 @@ def create_battery_entities_description(
     ]
 
     if has_led:
-        entities.append(
-            SolplanetNumberEntityDescription(
-                key=f"{isn}_led_brightness",
-                translation_key="led_brightness",
-                entity_category=EntityCategory.CONFIG,
-                data_field_device_type=BATTERY_IDENTIFIER,
-                data_field_data_type="more_settings",
-                data_field_path=["led_brightness"],
-                native_min_value=0,
-                native_max_value=100,
-                native_step=1,
-                native_unit_of_measurement=PERCENTAGE,
-                callback=lambda value: coordinator.set_battery_led_brightness(int(value)),
-            )
+        led_brightness = SolplanetNumberEntityDescription(
+            key=f"{isn}_led_brightness",
+            translation_key="led_brightness",
+            entity_category=EntityCategory.CONFIG,
+            data_field_device_type=BATTERY_IDENTIFIER,
+            data_field_data_type="more_settings",
+            data_field_path=["led_brightness"],
+            native_min_value=0,
+            native_max_value=100,
+            native_step=1,
+            native_unit_of_measurement=PERCENTAGE,
+            callback=lambda value: coordinator.set_battery_led_brightness(int(value)),
         )
+        if should_create_entity(coordinator, "number", led_brightness, isn):
+            entities.append(led_brightness)
 
     return entities
 
