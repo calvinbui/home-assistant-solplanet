@@ -46,8 +46,7 @@ Supported ASW5120-LB-G3 and RV5120-LB-G3 batteries also expose LED colour and br
 The inverter **Power** switch, the battery **Power** and **Sleep** switches, and the LED controls are
 read over Modbus. Some inverter, battery and dongle combinations do not answer those reads, so these
 entities are only created once a value has been read, and are added later if a read succeeds. Entities
-that already exist are kept. If you have any that have always shown **Unknown**, you can delete them
-from the entity registry.
+that already exist are kept. If you have any that have always shown **Unknown**, you can disable them.
 
 Changing **Power**, **Sleep**, or state-of-charge settings affects battery operation. Test changes while you can observe the system.
 
