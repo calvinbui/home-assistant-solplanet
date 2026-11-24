@@ -14,7 +14,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import SolplanetConfigEntry
 from .const import BATTERY_IDENTIFIER, BATTERY_MODELS_WITH_LED, DISCOVERY_SIGNAL
 from .coordinator import SolplanetDataUpdateCoordinator
-from .entity import SolplanetEntity, SolplanetEntityDescription, get_entity_unique_id
+from .entity import (
+    SolplanetEntity,
+    SolplanetEntityDescription,
+    get_entity_unique_id,
+    should_create_entity,
+)
 
 _LOGGER = logging.getLogger(__name__)
 PARALLEL_UPDATES = 0
@@ -127,21 +132,21 @@ def create_battery_entities_description(
     ]
 
     if has_led:
-        entities.append(
-            SolplanetNumberEntityDescription(
-                key=f"{isn}_led_brightness",
-                translation_key="led_brightness",
-                entity_category=EntityCategory.CONFIG,
-                data_field_device_type=BATTERY_IDENTIFIER,
-                data_field_data_type="more_settings",
-                data_field_path=["led_brightness"],
-                native_min_value=0,
-                native_max_value=100,
-                native_step=1,
-                native_unit_of_measurement=PERCENTAGE,
-                callback=lambda value: coordinator.set_battery_led_brightness(int(value)),
-            )
+        led_brightness = SolplanetNumberEntityDescription(
+            key=f"{isn}_led_brightness",
+            translation_key="led_brightness",
+            entity_category=EntityCategory.CONFIG,
+            data_field_device_type=BATTERY_IDENTIFIER,
+            data_field_data_type="more_settings",
+            data_field_path=["led_brightness"],
+            native_min_value=0,
+            native_max_value=100,
+            native_step=1,
+            native_unit_of_measurement=PERCENTAGE,
+            callback=lambda value: coordinator.set_battery_led_brightness(int(value)),
         )
+        if should_create_entity(coordinator, "number", led_brightness, isn):
+            entities.append(led_brightness)
 
     return entities
 

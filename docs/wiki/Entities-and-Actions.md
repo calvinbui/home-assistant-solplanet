@@ -15,7 +15,7 @@ Use the inverter device to monitor power, production, frequency, temperatures, w
 Turning off **Power** can stop the inverter. Keep this switch away from general-purpose dashboards and automations unless you deliberately need it.
 
 On V2 systems, **Grid status** shows whether the inverter is connected to the grid.
-If this reading is missing, you can enable **Modbus telemetry fallbacks** in the
+It is only created once the inverter reports it. If this reading is missing, you can enable **Modbus telemetry fallbacks** in the
 integration's **Configure** options. This is off by default and does not affect
 existing settings reads.
 
@@ -42,6 +42,11 @@ Common controls include:
 - **Schedule Configured**
 
 Supported ASW5120-LB-G3 and RV5120-LB-G3 batteries also expose LED colour and brightness controls.
+
+The inverter **Power** switch, the battery **Power** and **Sleep** switches, and the LED controls are
+read over Modbus. Some inverter, battery and dongle combinations do not answer those reads, so these
+entities are only created once a value has been read, and are added later if a read succeeds. Entities
+that already exist are kept. If you have any that have always shown **Unknown**, you can disable them.
 
 Changing **Power**, **Sleep**, or state-of-charge settings affects battery operation. Test changes while you can observe the system.
 

@@ -14,7 +14,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import SolplanetConfigEntry
 from .const import BATTERY_IDENTIFIER, DISCOVERY_SIGNAL, INVERTER_IDENTIFIER
-from .entity import SolplanetEntity, SolplanetEntityDescription
+from .entity import (
+    SolplanetEntity,
+    SolplanetEntityDescription,
+    get_entity_unique_id,
+    should_create_entity,
+)
 
 _LOGGER = logging.getLogger(__name__)
 PARALLEL_UPDATES = 0
@@ -120,13 +125,23 @@ async def async_setup_entry(
         device_type: set(coordinator.data[device_type]) for device_type in description_factories
     }
 
+    known_unique_ids: set[str] = set()
+
     def _create_switches(device_type: str, device_ids: set[str]) -> list[SolplanetSwitch]:
         factory = description_factories[device_type]
-        return [
-            SolplanetSwitch(description=description, isn=device_id, coordinator=coordinator)
-            for device_id in device_ids
-            for description in factory(device_id)
-        ]
+        switches: list[SolplanetSwitch] = []
+        for device_id in device_ids:
+            for description in factory(device_id):
+                unique_id = get_entity_unique_id(description, device_id)
+                if unique_id in known_unique_ids or not should_create_entity(
+                    coordinator, "switch", description, device_id
+                ):
+                    continue
+                known_unique_ids.add(unique_id)
+                switches.append(
+                    SolplanetSwitch(description=description, isn=device_id, coordinator=coordinator)
+                )
+        return switches
 
     @callback
     def _async_add_discovered_switches(
@@ -143,7 +158,19 @@ async def async_setup_entry(
         known_device_ids[device_type].update(new_device_ids)
         async_add_entities(_create_switches(device_type, new_device_ids))
 
+    @callback
+    def _async_add_supported_switches() -> None:
+        """Add switches whose settings the dongle returned after setup."""
+        new_switches = [
+            switch
+            for device_type, device_ids in known_device_ids.items()
+            for switch in _create_switches(device_type, device_ids)
+        ]
+        if new_switches:
+            async_add_entities(new_switches)
+
     entry.async_on_unload(async_dispatcher_connect(hass, DISCOVERY_SIGNAL, _async_add_discovered_switches))
+    entry.async_on_unload(coordinator.async_add_listener(_async_add_supported_switches))
     async_add_entities(
         switch
         for device_type, device_ids in known_device_ids.items()

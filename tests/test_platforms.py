@@ -246,3 +246,123 @@ async def test_switch_catalog_state_actions_setup_and_discovery() -> None:
     coordinator.data[BATTERY_IDENTIFIER]["bat-2"] = deepcopy(coordinator.data[BATTERY_IDENTIFIER]["bat-1"])
     discover(entry.entry_id, BATTERY_IDENTIFIER, {"bat-2"})
     assert len(added) == 5
+
+
+def _without_more_settings(data: dict) -> dict:
+    """Return integration data where the dongle never answered the battery settings read."""
+    data[BATTERY_IDENTIFIER]["bat-1"]["more_settings"] = {}
+    return data
+
+
+async def test_binary_sensor_hides_grid_status_until_reported() -> None:
+    """Grid status is not created for inverters that never report it, but appears if they do."""
+    data = integration_data()
+    data[INVERTER_IDENTIFIER]["inv-1"]["data"].grid_sts = None
+    coordinator = FakeCoordinator(data)
+    assert binary_sensor.create_inverter_binary_sensors(coordinator, "inv-1") == []
+
+    entry, _discover, added = await _setup_platform(binary_sensor, coordinator)
+    assert [entity.entity_description.translation_key for entity in added] == ["schedule_configured"]
+    assert len(coordinator.listeners) == 1
+
+    coordinator.listeners[0]()
+    assert len(added) == 1
+
+    coordinator.data[INVERTER_IDENTIFIER]["inv-1"]["data"].grid_sts = 1
+    coordinator.listeners[0]()
+    assert [entity.entity_description.translation_key for entity in added][-1] == "grid_status"
+    assert len(added) == 2
+    coordinator.listeners[0]()
+    assert len(added) == 2
+    assert entry.unloads
+
+
+async def test_battery_led_controls_hidden_until_settings_are_read() -> None:
+    """LED controls need a successful settings read, not just a supported battery model."""
+    coordinator = FakeCoordinator(_without_more_settings(integration_data()))
+    assert len(number.create_battery_entities_description(coordinator, "bat-1")) == 4
+    assert len(select.create_battery_entities_description(coordinator, "bat-1")) == 1
+
+    _entry, _discover, added_numbers = await _setup_platform(number, coordinator)
+    assert len(added_numbers) == 4
+    _entry, _discover, added_selects = await _setup_platform(select, coordinator)
+    assert len(added_selects) == 1
+
+    coordinator.data[BATTERY_IDENTIFIER]["bat-1"]["more_settings"] = {
+        "power_on": True,
+        "sleep_enabled": False,
+        "led_color_index": 2,
+        "led_brightness": 50,
+    }
+    coordinator.listeners[0]()
+    coordinator.listeners[1]()
+    assert len(added_numbers) == 5
+    assert len(added_selects) == 2
+
+
+async def test_battery_more_setting_switches_hidden_until_settings_are_read() -> None:
+    """Battery power and sleep switches are only added once their registers have been read."""
+    coordinator = FakeCoordinator(_without_more_settings(integration_data()))
+    entry, _discover, added = await _setup_platform(switch, coordinator)
+    assert [entity.unique_id for entity in added] == [added[0].unique_id]
+    assert added[0].entity_description.key == "inv-1_inverter_power"
+    assert len(coordinator.listeners) == 1
+
+    coordinator.listeners[0]()
+    assert len(added) == 1
+
+    coordinator.data[BATTERY_IDENTIFIER]["bat-1"]["more_settings"] = {"power_on": True}
+    coordinator.listeners[0]()
+    assert len(added) == 2
+    coordinator.data[BATTERY_IDENTIFIER]["bat-1"]["more_settings"] = {
+        "power_on": True,
+        "sleep_enabled": False,
+    }
+    coordinator.listeners[0]()
+    coordinator.listeners[0]()
+    assert len(added) == 3
+    assert entry.unloads
+
+
+async def test_inverter_power_switch_hidden_until_settings_are_read() -> None:
+    """The inverter power switch is read over Modbus too, so it follows the same rule."""
+    data = integration_data()
+    data[INVERTER_IDENTIFIER]["inv-1"]["more_settings"] = {}
+    coordinator = FakeCoordinator(data)
+    _entry, _discover, added = await _setup_platform(switch, coordinator)
+    assert "inv-1_inverter_power" not in [entity.entity_description.key for entity in added]
+
+    coordinator.data[INVERTER_IDENTIFIER]["inv-1"]["more_settings"] = {"power_on": True}
+    coordinator.listeners[0]()
+    assert "inv-1_inverter_power" in [entity.entity_description.key for entity in added]
+
+
+async def test_registered_entities_are_kept_when_the_device_has_no_data() -> None:
+    """A device that is asleep or slow at startup must not make an existing entity disappear."""
+    data = _without_more_settings(integration_data())
+    data[INVERTER_IDENTIFIER]["inv-1"]["data"] = None
+    data[INVERTER_IDENTIFIER]["inv-1"]["more_settings"] = {}
+    coordinator = FakeCoordinator(data)
+    assert binary_sensor.create_inverter_binary_sensors(coordinator, "inv-1") == []
+
+    registry = coordinator.entity_registry
+    registry.register("binary_sensor", "solplanet_inv-1_grid_sts")
+    registry.register("switch", "solplanet_inv-1_inverter_power")
+    registry.register("switch", "solplanet_battery_bat-1_battery_power")
+    registry.register("number", "solplanet_battery_bat-1_led_brightness")
+    registry.register("select", "solplanet_battery_bat-1_led_color")
+
+    assert [
+        d.translation_key for d in binary_sensor.create_inverter_binary_sensors(coordinator, "inv-1")
+    ] == ["grid_status"]
+    _entry, _discover, switches = await _setup_platform(switch, coordinator)
+    assert sorted(entity.entity_description.key for entity in switches) == [
+        "bat-1_battery_power",
+        "inv-1_inverter_power",
+    ]
+    assert "bat-1_led_brightness" in [
+        d.key for d in number.create_battery_entities_description(coordinator, "bat-1")
+    ]
+    assert "bat-1_led_color" in [
+        d.key for d in select.create_battery_entities_description(coordinator, "bat-1")
+    ]

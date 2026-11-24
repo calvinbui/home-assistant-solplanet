@@ -18,7 +18,7 @@ from . import SolplanetConfigEntry
 from .client import BatterySchedule
 from .const import BATTERY_IDENTIFIER, DISCOVERY_SIGNAL, INVERTER_IDENTIFIER
 from .coordinator import SolplanetDataUpdateCoordinator
-from .entity import SolplanetEntity, SolplanetEntityDescription
+from .entity import SolplanetEntity, SolplanetEntityDescription, get_entity_unique_id, should_create_entity
 
 _LOGGER = logging.getLogger(__name__)
 PARALLEL_UPDATES = 0
@@ -89,19 +89,23 @@ def create_battery_binary_sensors(
 def create_inverter_binary_sensors(
     coordinator: SolplanetDataUpdateCoordinator, isn: str
 ) -> list[SolplanetBinarySensorEntityDescription]:
-    """Create binary sensors for inverter."""
-    return [
-        SolplanetBinarySensorEntityDescription(
-            key=f"{isn}_grid_sts",
-            translation_key="grid_status",
-            device_class=BinarySensorDeviceClass.CONNECTIVITY,
-            data_field_device_type=INVERTER_IDENTIFIER,
-            data_field_data_type="data",
-            data_field_path=["grid_sts"],
-            data_field_value_mapper=lambda v: {0: False, 1: True}.get(v),
-            entity_category=EntityCategory.DIAGNOSTIC,
-        ),
-    ]
+    """Create binary sensors for inverter.
+
+    Grid status is only offered once the inverter has reported it (or if it is already registered).
+    Some V2 inverters never return it in the live JSON and reject the Modbus fallback register, so it
+    would stay Unknown forever.
+    """
+    grid_status = SolplanetBinarySensorEntityDescription(
+        key=f"{isn}_grid_sts",
+        translation_key="grid_status",
+        device_class=BinarySensorDeviceClass.CONNECTIVITY,
+        data_field_device_type=INVERTER_IDENTIFIER,
+        data_field_data_type="data",
+        data_field_path=["grid_sts"],
+        data_field_value_mapper=lambda v: {0: False, 1: True}.get(v),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    )
+    return [grid_status] if should_create_entity(coordinator, "binary_sensor", grid_status, isn) else []
 
 
 async def async_setup_entry(
@@ -121,13 +125,21 @@ async def async_setup_entry(
         device_type: set(coordinator.data[device_type]) for device_type in description_factories
     }
 
+    known_unique_ids: set[str] = set()
+
     def _create_sensors(device_type: str, device_ids: set[str]) -> list[SolplanetBinarySensor]:
         factory = description_factories[device_type]
-        return [
-            SolplanetBinarySensor(description=description, isn=device_id, coordinator=coordinator)
-            for device_id in device_ids
-            for description in factory(coordinator, device_id)
-        ]
+        sensors: list[SolplanetBinarySensor] = []
+        for device_id in device_ids:
+            for description in factory(coordinator, device_id):
+                unique_id = get_entity_unique_id(description, device_id)
+                if unique_id in known_unique_ids:
+                    continue
+                known_unique_ids.add(unique_id)
+                sensors.append(
+                    SolplanetBinarySensor(description=description, isn=device_id, coordinator=coordinator)
+                )
+        return sensors
 
     sensors = [
         sensor
@@ -150,7 +162,20 @@ async def async_setup_entry(
         known_device_ids[device_type].update(new_device_ids)
         async_add_entities(_create_sensors(device_type, new_device_ids))
 
-    entry.async_on_unload(async_dispatcher_connect(hass, DISCOVERY_SIGNAL, _async_add_discovered_sensors))
+    @callback
+    def _async_add_reported_sensors() -> None:
+        """Add inverter sensors whose value the inverter first reported after setup."""
+        new_sensors = _create_sensors(INVERTER_IDENTIFIER, known_device_ids[INVERTER_IDENTIFIER])
+        if new_sensors:
+            async_add_entities(new_sensors)
 
-    # Always add entities; values may be missing during startup/inverter sleep.
+    entry.async_on_unload(async_dispatcher_connect(hass, DISCOVERY_SIGNAL, _async_add_discovered_sensors))
+    if INVERTER_IDENTIFIER in description_factories:
+        entry.async_on_unload(
+            coordinator.runtime.coordinator_for(INVERTER_IDENTIFIER, "data").async_add_listener(
+                _async_add_reported_sensors
+            )
+        )
+
+    # Entities backed by an optional inverter value are added once that value is reported.
     async_add_entities(sensors)
